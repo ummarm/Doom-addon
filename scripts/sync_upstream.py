@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Sync selected upstream Nuvio scraper files into Doom-plug.
+"""Sync selected upstream Nuvio scraper files into Doom-addon.
 
-This script intentionally preserves Doom-plug local customizations:
-- domain lookups stay pointed at Doom-plug's own domains.json
+This script intentionally preserves Doom-addon local customizations:
+- domain lookups stay pointed at Doom-addon's own domains.json
 - HindMoviez keeps direct URLs instead of the upstream worker proxy
 """
 
@@ -30,8 +30,8 @@ ANCHOR_DATE = date(2026, 4, 20)
 CADENCE_DAYS = 2
 UPSTREAM_RAW_BASE = "https://raw.githubusercontent.com/D3adlyRocket/All-in-One-Nuvio/main"
 UPSTREAM_TREE_API = "https://api.github.com/repos/D3adlyRocket/All-in-One-Nuvio/git/trees/main?recursive=1"
-DOOM_DOMAINS_URL = "https://raw.githubusercontent.com/ummarm/Doom-plug/main/domains.json"
-USER_AGENT = "Doom-plug upstream sync"
+ADDON_DOMAINS_URL = "https://raw.githubusercontent.com/ummarm/Doom-addon/main/domains.json"
+USER_AGENT = "Doom-addon upstream sync"
 
 
 @dataclass(frozen=True)
@@ -186,12 +186,12 @@ def candidate_upstream_paths(provider: Provider, upstream_tree_paths: list[str])
 def patch_domain_source(text: str) -> str:
     updated, count = re.subn(
         r"""(?:var|const|let)\s+DOMAINS_URL\s*=\s*["'][^"']+["'];""",
-        f'var DOMAINS_URL = "{DOOM_DOMAINS_URL}";',
+        f'var DOMAINS_URL = "{ADDON_DOMAINS_URL}";',
         text,
         count=1,
     )
     if count != 1:
-        raise RuntimeError("Could not retarget DOMAINS_URL to Doom-plug domains.json")
+        raise RuntimeError("Could not retarget DOMAINS_URL to Doom-addon domains.json")
     return updated
 
 
@@ -298,7 +298,7 @@ def update_manifest(changed_ids: set[str]) -> list[str]:
     old_registry_version = registry["version"]
     registry["version"] = bump_patch(old_registry_version)
     version_changes.append(
-        f"Doom-plug provider registry: `{old_registry_version}` -> `{registry['version']}`"
+        f"Doom-addon provider registry: `{old_registry_version}` -> `{registry['version']}`"
     )
 
     for scraper in registry.get("scrapers", []):
@@ -355,7 +355,7 @@ def write_pr_body(
     lines = [
         "## What changed",
         "",
-        "This automated sync pulled the latest upstream versions of these Doom-plug scrapers:",
+        "This automated sync pulled the latest upstream versions of these Doom-addon scrapers:",
         "",
     ]
     for provider in changed:
@@ -364,11 +364,11 @@ def write_pr_body(
     lines.extend(
         [
             "",
-            "## Doom-plug local patches preserved",
+            "## Doom-addon local patches preserved",
             "",
-            "- `4KHDHub`, `4khdhub-tv`, `HDHub4u`, and `MoviesDrive` still point at Doom-plug's own `domains.json`.",
+            "- `4KHDHub`, `4khdhub-tv`, `HDHub4u`, and `MoviesDrive` still point at Doom-addon's own `domains.json`.",
             "- `HindMoviez` still uses direct resolved URLs instead of the upstream worker proxy.",
-            "- `4KHDHub` and `4khdhub-tv` keep Doom-plug's preferred-host fallback behavior, while `HDHub4u` keeps FSL-first fallback behavior.",
+            "- `4KHDHub` and `4khdhub-tv` keep Doom-addon's preferred-host fallback behavior, while `HDHub4u` keeps FSL-first fallback behavior.",
             "",
             "## Version bumps",
             "",
@@ -408,7 +408,7 @@ def main() -> int:
         write_output("skipped", "true")
         write_summary(
             [
-                "## Doom-plug upstream sync",
+                "## Doom-addon upstream sync",
                 "",
                 f"Skipped on `{today_utc.isoformat()}` UTC because the 2-day cadence is anchored to `{ANCHOR_DATE.isoformat()}`.",
                 "The workflow still runs daily so manual dispatch stays available, but real sync work only happens on cadence days unless `force` is enabled.",
@@ -423,7 +423,7 @@ def main() -> int:
         upstream_tree_paths = fetch_upstream_tree_paths()
     except Exception as exc:
         upstream_tree_paths = []
-        warning = f"Upstream tree discovery failed, so Doom-plug fell back to static paths: {exc}"
+        warning = f"Upstream tree discovery failed, so Doom-addon fell back to static paths: {exc}"
         sync_warnings.append(warning)
         print(f"Warning: {warning}")
 
@@ -471,7 +471,7 @@ def main() -> int:
 
     if not changed_providers:
         summary_lines = [
-            "## Doom-plug upstream sync",
+            "## Doom-addon upstream sync",
             "",
             f"No upstream changes were applied on `{today_utc.isoformat()}` UTC.",
         ]
@@ -496,7 +496,7 @@ def main() -> int:
     write_output("skipped", "false")
     write_output("changed_scrapers", changed_names)
     summary_lines = [
-        "## Doom-plug upstream sync",
+        "## Doom-addon upstream sync",
         "",
         f"Updated scrapers: `{changed_names}`",
         "",

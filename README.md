@@ -1,6 +1,6 @@
-# Doom-plug
+# Doom-addon
 
-Doom-plug is now a Stremio stream add-on that wraps these seven providers from
+Doom-addon is a Stremio stream add-on that wraps these seven providers from
 `D3adlyRocket/All-in-One-Nuvio`:
 
 - `4KHDHub`
@@ -17,7 +17,7 @@ every enabled provider, merges the results, and returns Stremio stream objects.
 ## Files
 
 - `manifest.json` - Stremio add-on manifest
-- `providers.json` - Doom-plug provider registry and provider versions
+- `providers.json` - Doom-addon provider registry and provider versions
 - `addon.js` - Stremio request adapter around the provider modules
 - `server.js` - HTTP server for Stremio
 - `providers/4khdhub.js`
@@ -84,7 +84,7 @@ This repo includes a GitHub Actions workflow at
 - It checks the upstream repo every day.
 - Real sync work only happens every 2 days, anchored from `2026-04-20`.
 - If one of the tracked upstream scrapers changes, the workflow updates the local
-  provider file, preserves Doom-plug's local patches, bumps the affected version
+  provider file, preserves Doom-addon's local patches, bumps the affected version
   numbers in `providers.json`, bumps the Stremio `manifest.json` version, and
   opens a pull request automatically.
 - You can also run it manually from the GitHub Actions tab with `force=true`.

@@ -9,7 +9,7 @@ const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 
 // Moviesdrive Configuration
 let MAIN_URL = "https://new2.moviesdrives.my";
-var DOMAINS_URL = "https://raw.githubusercontent.com/ummarm/Doom-plug/main/domains.json";
+var DOMAINS_URL = "https://raw.githubusercontent.com/ummarm/Doom-addon/main/domains.json";
 const DOMAIN_CACHE_TTL = 4 * 60 * 60 * 1000; // 4 hours
 let domainCacheTimestamp = 0;
 

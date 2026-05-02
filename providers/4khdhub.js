@@ -74,7 +74,7 @@ module.exports = __toCommonJS(FourKHDHub_exports);
 var import_cheerio_without_node_native2 = __toESM(require("cheerio-without-node-native"));
 
 // src/4KHDHub/http.js
-var DOMAINS_URL = "https://raw.githubusercontent.com/ummarm/Doom-plug/main/domains.json";
+var DOMAINS_URL = "https://raw.githubusercontent.com/ummarm/Doom-addon/main/domains.json";
 var TMDB_API_KEY = "439c478a771f35c05022f9feabcca01c";
 var DEFAULT_MAIN_URL = "https://4khdhub.dad";
 

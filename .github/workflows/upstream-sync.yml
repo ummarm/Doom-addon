@@ -56,6 +56,6 @@ jobs:
             providers/streamflix.js
           branch: automation/upstream-sync
           delete-branch: true
-          commit-message: "chore: sync upstream Doom-plug scrapers"
-          title: "chore: sync upstream Doom-plug scrapers"
+          commit-message: "chore: sync upstream Doom-addon scrapers"
+          title: "chore: sync upstream Doom-addon scrapers"
           body-path: .git/upstream-sync-pr-body.md

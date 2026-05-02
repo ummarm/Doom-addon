@@ -69,7 +69,7 @@ var import_cheerio_without_node_native2 = __toESM(require("cheerio-without-node-
 var TMDB_API_KEY = "439c478a771f35c05022f9feabcca01c";
 var TMDB_BASE_URL = "https://api.themoviedb.org/3";
 var MAIN_URL = "https://new3.hdhub4u.fo";
-var DOMAINS_URL = "https://raw.githubusercontent.com/ummarm/Doom-plug/main/domains.json";
+var DOMAINS_URL = "https://raw.githubusercontent.com/ummarm/Doom-addon/main/domains.json";
 var DOMAIN_CACHE_TTL = 4 * 60 * 60 * 1e3;
 var HEADERS = {
   "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0",

@@ -64,7 +64,7 @@ async function resolveTmdbId(imdbId, mediaType) {
   const response = await fetch(url, {
     headers: {
       Accept: "application/json",
-      "User-Agent": "Doom-plug Stremio Addon"
+      "User-Agent": "Doom-addon Stremio Addon"
     }
   });
 

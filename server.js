@@ -62,7 +62,7 @@ const server = http.createServer(async (request, response) => {
       sendText(
         response,
         200,
-        `Doom-plug Stremio add-on is running.\nInstall URL: ${url.origin}/manifest.json\n`
+        `Doom-addon Stremio add-on is running.\nInstall URL: ${url.origin}/manifest.json\n`
       );
       return;
     }
@@ -88,5 +88,5 @@ const server = http.createServer(async (request, response) => {
 
 server.listen(PORT, HOST, () => {
   const displayHost = HOST === "0.0.0.0" ? "localhost" : HOST;
-  console.log(`Doom-plug Stremio add-on listening on http://${displayHost}:${PORT}`);
+  console.log(`Doom-addon Stremio add-on listening on http://${displayHost}:${PORT}`);
 });
