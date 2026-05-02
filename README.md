@@ -1,0 +1,100 @@
+# Doom-plug
+
+Doom-plug is now a Stremio stream add-on that wraps these seven providers from
+`D3adlyRocket/All-in-One-Nuvio`:
+
+- `4KHDHub`
+- `HDHub4u`
+- `4khdhub-tv`
+- `HindMoviez`
+- `MovieBlast`
+- `MoviesDrive`
+- `StreamFlix`
+
+It exposes a Stremio-compatible `manifest.json` and a stream endpoint that calls
+every enabled provider, merges the results, and returns Stremio stream objects.
+
+## Files
+
+- `manifest.json` - Stremio add-on manifest
+- `providers.json` - Doom-plug provider registry and provider versions
+- `addon.js` - Stremio request adapter around the provider modules
+- `server.js` - HTTP server for Stremio
+- `providers/4khdhub.js`
+- `providers/4khdhub_tv.js`
+- `providers/hdhub4u.js`
+- `providers/hindmoviez.js`
+- `providers/movieblast.js`
+- `providers/moviesdrive.js`
+- `providers/streamflix.js`
+
+## Run locally
+
+```sh
+npm install
+npm start
+```
+
+The default local install URL is:
+
+```text
+http://localhost:7000/manifest.json
+```
+
+You can change the port with:
+
+```sh
+PORT=8080 npm start
+```
+
+## Deploy
+
+This add-on is dynamic, so the raw GitHub URL is no longer enough for Stremio.
+Deploy the repo to a Node host, then install the hosted manifest URL:
+
+```text
+https://<your-host>/manifest.json
+```
+
+The stream endpoint shape is:
+
+```text
+/stream/movie/tt0111161.json
+/stream/series/tt0944947:1:1.json
+```
+
+## Notes
+
+- The provider files were copied from the GPL-3.0 licensed upstream repo:
+  `https://github.com/D3adlyRocket/All-in-One-Nuvio`
+- If you keep redistributing these files, keep the original license terms and
+  attribution in mind.
+- `4KHDHub`, `4khdhub-tv`, and `HDHub4u` read domain data from this repo's
+  `domains.json`.
+- `HindMoviez` returns resolved direct URLs instead of relying on the upstream
+  Cloudflare worker.
+- `4KHDHub`, `4khdhub-tv`, and `HDHub4u` prefer FSL-family links first, but fall
+  back to the original available links if no FSL link exists.
+
+## Upstream monitoring
+
+This repo includes a GitHub Actions workflow at
+`.github/workflows/upstream-sync.yml`.
+
+- It checks the upstream repo every day.
+- Real sync work only happens every 2 days, anchored from `2026-04-20`.
+- If one of the tracked upstream scrapers changes, the workflow updates the local
+  provider file, preserves Doom-plug's local patches, bumps the affected version
+  numbers in `providers.json`, bumps the Stremio `manifest.json` version, and
+  opens a pull request automatically.
+- You can also run it manually from the GitHub Actions tab with `force=true`.
+
+Tracked upstream files:
+
+- `providers/4khdhub.js`
+- `providers/4khdhub_tv.js`
+- `providers/hdhub4u.js`
+- `providers/hindmoviez.js`
+- `providers/movieblast.js`
+- `providers/moviesdrive.js`
+- `providers/streamflix.js`
