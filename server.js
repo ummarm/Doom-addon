@@ -1,10 +1,13 @@
 "use strict";
 
 const http = require("http");
+const fs = require("fs");
+const path = require("path");
 const { manifest, getStreams } = require("./addon");
 
 const PORT = Number(process.env.PORT || 7000);
 const HOST = process.env.HOST || "0.0.0.0";
+const ASSETS_DIR = path.join(__dirname, "assets");
 
 function sendJson(response, statusCode, payload, cacheSeconds = 0) {
   const body = JSON.stringify(payload);
@@ -25,6 +28,17 @@ function sendText(response, statusCode, text) {
     "Content-Length": Buffer.byteLength(text)
   });
   response.end(text);
+}
+
+function sendFile(response, statusCode, filePath, contentType, cacheSeconds = 0) {
+  const body = fs.readFileSync(filePath);
+  response.writeHead(statusCode, {
+    "Access-Control-Allow-Origin": "*",
+    "Content-Type": contentType,
+    "Cache-Control": cacheSeconds > 0 ? `public, max-age=${cacheSeconds}` : "no-store",
+    "Content-Length": body.length
+  });
+  response.end(body);
 }
 
 function parseStreamPath(pathname) {
@@ -64,6 +78,11 @@ const server = http.createServer(async (request, response) => {
         200,
         `Doom-addon Stremio add-on is running.\nInstall URL: ${url.origin}/manifest.json\n`
       );
+      return;
+    }
+
+    if (url.pathname === "/assets/umbrella-icon.png") {
+      sendFile(response, 200, path.join(ASSETS_DIR, "umbrella-icon.png"), "image/png", 86400);
       return;
     }
 
