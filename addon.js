@@ -238,13 +238,58 @@ async function filterPlayableStreams(streams) {
 }
 
 const UMBRELLA_STREAM_LABELS = {
-  "4khdhub": "4K HH",
+  "4khdhub": "4K DR",
+  "4khdhubtv": "4K DR",
+  "4khdhub_yoruix": "4K Y",
   "4khdhub_murph": "4K HHM"
 };
+
+function parseSizeToBytes(value) {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return value;
+  }
+
+  const match = String(value || "").match(/([\d.]+)\s*(tb|gb|mb|kb|bytes|byte|b)\b/i);
+  if (!match) {
+    return 0;
+  }
+
+  const amount = Number(match[1]);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return 0;
+  }
+
+  const unit = match[2].toLowerCase();
+  const multipliers = {
+    tb: 1024 ** 4,
+    gb: 1024 ** 3,
+    mb: 1024 ** 2,
+    kb: 1024,
+    bytes: 1,
+    byte: 1,
+    b: 1
+  };
+  return Math.round(amount * multipliers[unit]);
+}
+
+function streamSizeBytes(stream) {
+  if (!stream || typeof stream !== "object") {
+    return 0;
+  }
+
+  return parseSizeToBytes(stream.behaviorHints && stream.behaviorHints.videoSize)
+    || parseSizeToBytes(stream.videoSize)
+    || parseSizeToBytes(stream.size)
+    || parseSizeToBytes(stream.description)
+    || parseSizeToBytes(stream.title)
+    || parseSizeToBytes(stream.name);
+}
 
 function normalizeLanguageText(value) {
   const text = String(value || "")
     .replace(/\b4KHDHub\s+Murph\b/ig, "")
+    .replace(/\b4KHDHub\s+Yoruix\b/ig, "")
+    .replace(/\b4khdhub-tv\b/ig, "")
     .replace(/\b4KHDHub\b/ig, "")
     .replace(/\b4K\b/ig, "")
     .replace(/\b(?:2160p|1080p|720p|480p|360p|auto)\b/ig, "")
@@ -295,12 +340,13 @@ function normalizeStream(rawStream, provider) {
   const nameParts = [provider.name, quality].filter(Boolean);
   const description = rawStream.description || rawStream.title || nameParts.join(" | ");
   const behaviorHints = Object.assign({}, rawStream.behaviorHints || {});
+  const detectedSize = streamSizeBytes(rawStream);
 
   if (rawStream.fileName && !behaviorHints.filename) {
     behaviorHints.filename = rawStream.fileName;
   }
-  if (typeof rawStream.size === "number" && rawStream.size > 0 && !behaviorHints.videoSize) {
-    behaviorHints.videoSize = rawStream.size;
+  if (detectedSize > 0 && !behaviorHints.videoSize) {
+    behaviorHints.videoSize = detectedSize;
   }
   if (!behaviorHints.bingeGroup) {
     behaviorHints.bingeGroup = `doomp-${provider.id}-${String(quality || "auto").toLowerCase()}`;
@@ -390,6 +436,14 @@ async function getStreams(type, id) {
 
   const playableStreams = await filterPlayableStreams(dedupeStreams(streams));
   return playableStreams.sort((a, b) => {
+    const sizeA = streamSizeBytes(a);
+    const sizeB = streamSizeBytes(b);
+    if (sizeA && sizeB && sizeA !== sizeB) {
+      return sizeA - sizeB;
+    }
+    if (sizeA && !sizeB) return -1;
+    if (!sizeA && sizeB) return 1;
+
     const rankA = qualityRank(`${a.name} ${a.description}`);
     const rankB = qualityRank(`${b.name} ${b.description}`);
     return rankB - rankA;
