@@ -237,12 +237,19 @@ async function filterPlayableStreams(streams) {
   return filtered;
 }
 
-const UMBRELLA_STREAM_LABELS = {
-  "4khdhub": "4K DR",
-  "4khdhubtv": "4K DR",
-  "4khdhub_yoruix": "4K Y"
+const UMBRELLA_PROVIDER_CODES = {
+  "4khdhub": "4KHH DR",
+  "4khdhubtv": "4KHH DR",
+  "4khdhub_yoruix": "4KHH Y",
+  "4khdhub_murph": "4KHH M",
+  "hdhub4u": "HDHU DR",
+  "hdhub4u_murph": "HDHU M",
+  "hindmoviez": "HM",
+  "movieblast": "MBL",
+  "moviebox": "MB",
+  "moviesdrive": "MD",
+  "streamflix": "SF"
 };
-const MURPH_PROVIDER_IDS = new Set(["4khdhub_murph", "hdhub4u_murph"]);
 const KNOWN_AUDIO_LABELS = ["Hindi", "Tamil", "Telugu", "English", "Malayalam", "Kannada", "Punjabi"];
 
 function parseSizeToBytes(value) {
@@ -286,13 +293,6 @@ function streamSizeBytes(stream) {
     || parseSizeToBytes(stream.name);
 }
 
-function has4KSignal(rawStream, provider) {
-  return /\b(?:4k|2160p)\b/i.test([
-    rawStream.quality,
-    rawStream.behaviorHints && rawStream.behaviorHints.bingeGroup
-  ].filter(Boolean).join(" "));
-}
-
 function streamQualityLabel(rawStream) {
   const text = [
     rawStream.quality,
@@ -308,17 +308,13 @@ function streamQualityLabel(rawStream) {
 
   const quality = match[1].toLowerCase();
   if (quality === "4k" || quality === "2160p") {
-    return "";
+    return "2160p";
   }
   return quality;
 }
 
 function umbrellaProviderCode(rawStream, provider) {
-  if (MURPH_PROVIDER_IDS.has(provider.id)) {
-    return has4KSignal(rawStream, provider) ? "4K HHM" : "HHM";
-  }
-
-  return UMBRELLA_STREAM_LABELS[provider.id] || null;
+  return UMBRELLA_PROVIDER_CODES[provider.id] || null;
 }
 
 function audioLabelsFromText(value) {
@@ -358,9 +354,17 @@ function normalizeLanguageText(value) {
     .replace(/\b4KHDHub\s+Murph\b/ig, "")
     .replace(/\b4KHDHub\s+Yoruix\b/ig, "")
     .replace(/\bHDHub4u\s+Murph\b/ig, "")
+    .replace(/\bD3adlyRocket\b/ig, "")
+    .replace(/\bYoruix\b/ig, "")
+    .replace(/\bMurph\b/ig, "")
     .replace(/\bHDHub4u\b/ig, "")
     .replace(/\b4khdhub-tv\b/ig, "")
     .replace(/\b4KHDHub\b/ig, "")
+    .replace(/\bHindMoviez\b/ig, "")
+    .replace(/\bMovieBlast\b/ig, "")
+    .replace(/\bMovieBox\b/ig, "")
+    .replace(/\bMoviesDrive\b/ig, "")
+    .replace(/\bStreamflix\b/ig, "")
     .replace(/\b4K\b/ig, "")
     .replace(/\b(?:2160p|1080p|720p|480p|360p|auto)\b/ig, "")
     .replace(/\b(?:fsl|pixelserver|hubcloud|hubdrive|download|file|server)\b/ig, "")
