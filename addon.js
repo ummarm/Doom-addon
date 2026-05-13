@@ -293,6 +293,26 @@ function has4KSignal(rawStream, provider) {
   ].filter(Boolean).join(" "));
 }
 
+function streamQualityLabel(rawStream) {
+  const text = [
+    rawStream.quality,
+    rawStream.name,
+    rawStream.title,
+    rawStream.description,
+    rawStream.behaviorHints && rawStream.behaviorHints.bingeGroup
+  ].filter(Boolean).join(" ");
+  const match = text.match(/\b(4k|2160p|1440p|1080p|720p|480p|360p)\b/i);
+  if (!match) {
+    return "";
+  }
+
+  const quality = match[1].toLowerCase();
+  if (quality === "4k" || quality === "2160p") {
+    return "";
+  }
+  return quality;
+}
+
 function umbrellaProviderCode(rawStream, provider) {
   if (MURPH_PROVIDER_IDS.has(provider.id)) {
     return has4KSignal(rawStream, provider) ? "4K HHM" : "HHM";
@@ -374,7 +394,15 @@ function umbrellaStreamName(rawStream, provider) {
   const sourceName = rawStream.name || "";
   const sourceTitle = rawStream.title || rawStream.description || "";
   const languageText = normalizeLanguageText(sourceName) || normalizeLanguageText(sourceTitle);
-  return ["Umbrella", providerCode, languageText].filter(Boolean).join(" | ");
+  return ["Umbrella", providerCode, streamQualityLabel(rawStream), languageText].filter(Boolean).join(" | ");
+}
+
+function nameWithQuality(name, rawStream) {
+  const quality = streamQualityLabel(rawStream);
+  if (!quality || new RegExp(`\\b${quality}\\b`, "i").test(String(name || ""))) {
+    return name;
+  }
+  return [name, quality].filter(Boolean).join(" | ");
 }
 
 function normalizeStream(rawStream, provider) {
@@ -413,7 +441,10 @@ function normalizeStream(rawStream, provider) {
   }
 
   return {
-    name: umbrellaStreamName(rawStream, provider) || rawStream.name || nameParts.join(" | ") || provider.name,
+    name: nameWithQuality(
+      umbrellaStreamName(rawStream, provider) || rawStream.name || nameParts.join(" | ") || provider.name,
+      rawStream
+    ),
     title: description,
     description,
     url: targetUrl,
