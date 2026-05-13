@@ -6,6 +6,8 @@ const path = require("path");
 const ROOT = __dirname;
 const TMDB_API_KEY = process.env.TMDB_API_KEY || "439c478a771f35c05022f9feabcca01c";
 const DEFAULT_TIMEOUT_MS = Number(process.env.PROVIDER_TIMEOUT_MS || 25000);
+const STREAM_PROBE_TIMEOUT_MS = Number(process.env.STREAM_PROBE_TIMEOUT_MS || 8000);
+const STREAM_PROBE_CONCURRENCY = Number(process.env.STREAM_PROBE_CONCURRENCY || 6);
 
 const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "manifest.json"), "utf8"));
 const providerRegistry = JSON.parse(fs.readFileSync(path.join(ROOT, "providers.json"), "utf8"));
@@ -101,6 +103,138 @@ function normalizeHeaders(headers) {
 
 function looksWebReady(url) {
   return /^https:\/\//i.test(url) && /\.mp4(?:[?#].*)?$/i.test(url);
+}
+
+function looksLikeHls(url, contentType = "") {
+  const normalizedUrl = String(url || "").toLowerCase();
+  const normalizedType = String(contentType || "").toLowerCase();
+  return normalizedUrl.includes(".m3u8")
+    || normalizedType.includes("mpegurl")
+    || normalizedType.includes("application/x-mpegurl")
+    || normalizedType.includes("vnd.apple.mpegurl");
+}
+
+function looksLikeErrorDocument(contentType, sampleText = "") {
+  const normalizedType = String(contentType || "").toLowerCase();
+  const sample = String(sampleText || "").trim().slice(0, 256).toLowerCase();
+  return normalizedType.includes("text/html")
+    || normalizedType.includes("application/json")
+    || normalizedType.includes("text/plain")
+    || normalizedType.includes("xml")
+    || sample.startsWith("<!doctype")
+    || sample.startsWith("<html")
+    || sample.startsWith("{")
+    || sample.includes("<title>error")
+    || sample.includes("cloudflare")
+    || sample.includes("access denied")
+    || sample.includes("not found");
+}
+
+function responseIsSeekable(response, url, sampleText = "") {
+  if (!response || !response.ok) {
+    return false;
+  }
+
+  const contentType = response.headers.get("content-type") || "";
+  if (looksLikeErrorDocument(contentType, sampleText)) {
+    return false;
+  }
+
+  if (looksLikeHls(url, contentType)) {
+    return !sampleText || sampleText.includes("#EXTM3U");
+  }
+
+  const acceptRanges = response.headers.get("accept-ranges") || "";
+  const contentRange = response.headers.get("content-range") || "";
+  return response.status === 206
+    || /bytes/i.test(acceptRanges)
+    || /^bytes\s+/i.test(contentRange);
+}
+
+function streamRequestHeaders(stream) {
+  const proxyHeaders = stream.behaviorHints
+    && stream.behaviorHints.proxyHeaders
+    && stream.behaviorHints.proxyHeaders.request;
+  return normalizeHeaders(proxyHeaders) || {};
+}
+
+async function responseSampleText(response) {
+  if (!response.body || typeof response.body.getReader !== "function") {
+    return "";
+  }
+
+  const reader = response.body.getReader();
+  try {
+    const chunk = await reader.read();
+    if (!chunk.value) {
+      return "";
+    }
+    return Buffer.from(chunk.value).slice(0, 512).toString("utf8");
+  } finally {
+    await reader.cancel().catch(() => {});
+  }
+}
+
+async function probeStream(stream) {
+  const headers = streamRequestHeaders(stream);
+  const isHls = looksLikeHls(stream.url);
+  const rangedHeaders = Object.assign({}, headers);
+  if (!isHls && !rangedHeaders.Range && !rangedHeaders.range) {
+    rangedHeaders.Range = "bytes=0-4095";
+  }
+
+  const getResponse = await withTimeout(
+    fetch(stream.url, {
+      method: "GET",
+      headers: isHls ? headers : rangedHeaders,
+      redirect: "follow"
+    }),
+    STREAM_PROBE_TIMEOUT_MS,
+    `${stream.name} probe`
+  );
+  const sampleText = await responseSampleText(getResponse);
+  if (responseIsSeekable(getResponse, stream.url, sampleText)) {
+    return true;
+  }
+
+  const headResponse = await withTimeout(
+    fetch(stream.url, {
+      method: "HEAD",
+      headers,
+      redirect: "follow"
+    }),
+    STREAM_PROBE_TIMEOUT_MS,
+    `${stream.name} head probe`
+  );
+  return responseIsSeekable(headResponse, stream.url);
+}
+
+async function filterPlayableStreams(streams) {
+  const filtered = [];
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < streams.length) {
+      const stream = streams[nextIndex];
+      nextIndex += 1;
+      try {
+        if (await probeStream(stream)) {
+          filtered.push(stream);
+        } else {
+          console.log(`[Stream probe] Rejected unplayable source: ${stream.name}`);
+        }
+      } catch (error) {
+        console.log(`[Stream probe] Rejected ${stream.name}: ${error.message || error}`);
+      }
+    }
+  }
+
+  const workers = Array.from(
+    { length: Math.min(STREAM_PROBE_CONCURRENCY, streams.length) },
+    () => worker()
+  );
+  await Promise.all(workers);
+  return filtered;
 }
 
 const UMBRELLA_STREAM_LABELS = {
@@ -254,7 +388,8 @@ async function getStreams(type, id) {
     return [];
   });
 
-  return dedupeStreams(streams).sort((a, b) => {
+  const playableStreams = await filterPlayableStreams(dedupeStreams(streams));
+  return playableStreams.sort((a, b) => {
     const rankA = qualityRank(`${a.name} ${a.description}`);
     const rankB = qualityRank(`${b.name} ${b.description}`);
     return rankB - rankA;
