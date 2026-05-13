@@ -328,6 +328,7 @@ PROVIDERS = (
     Provider("movieblast", ("providers/movieblast.js",), "providers/movieblast.js", ("movieblast",)),
     Provider("moviebox", ("providers/moviebox.js",), "providers/moviebox.js", ("moviebox",)),
     Provider("4khdhub_yoruix", ("providers/4khdhub.js",), "providers/4khdhub_yoruix.js", ("4khdhub", "hubcloud", "yoruix"), YORUIX_UPSTREAM_RAW_BASE, YORUIX_UPSTREAM_TREE_API),
+    Provider("hdhub4u_yoruix", ("providers/hdhub4u.js", "src/hdhub4u/index.js"), "providers/hdhub4u_yoruix.js", ("hdhub4u", "yoruix"), YORUIX_UPSTREAM_RAW_BASE, YORUIX_UPSTREAM_TREE_API),
     Provider("moviesdrive", ("src/providers/moviesdrive.js", "providers/moviesdrive.js"), "providers/moviesdrive.js", ("moviesdrive",)),
     Provider("streamflix", ("providers/streamflix.js",), "providers/streamflix.js", ("streamflix",)),
 )
@@ -509,7 +510,7 @@ def patch_stream_normalization(text: str) -> str:
 
 
 def transform_source(provider: Provider, text: str) -> str:
-    if provider.scraper_id in {"4khdhub", "4khdhubtv", "hdhub4u", "4khdhub_yoruix"}:
+    if provider.scraper_id in {"4khdhub", "4khdhubtv", "hdhub4u", "4khdhub_yoruix", "hdhub4u_yoruix"}:
         text = patch_domain_source(text)
     elif provider.scraper_id == "moviesdrive":
         text = patch_moviesdrive_domain_source(text)

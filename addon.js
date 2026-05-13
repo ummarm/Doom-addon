@@ -114,6 +114,17 @@ function looksLikeHls(url, contentType = "") {
     || normalizedType.includes("vnd.apple.mpegurl");
 }
 
+function looksLikeDirectMediaUrl(url) {
+  const normalized = String(url || "").toLowerCase();
+  if (!/^https?:\/\//i.test(normalized)) {
+    return false;
+  }
+  if (/\/login(?:\.php)?\b/.test(normalized) || /(?:action=logout|\/logout\b)/.test(normalized)) {
+    return false;
+  }
+  return /\.(?:mp4|mkv|m3u8|ts)(?:$|[?#])/i.test(normalized);
+}
+
 function looksLikeErrorDocument(contentType, sampleText = "") {
   const normalizedType = String(contentType || "").toLowerCase();
   const sample = String(sampleText || "").trim().slice(0, 256).toLowerCase();
@@ -130,25 +141,28 @@ function looksLikeErrorDocument(contentType, sampleText = "") {
     || sample.includes("not found");
 }
 
-function responseIsSeekable(response, url, sampleText = "") {
+function responseProbeResult(response, url, sampleText = "") {
   if (!response || !response.ok) {
-    return false;
+    return { ok: false, hardFail: false };
   }
 
   const contentType = response.headers.get("content-type") || "";
   if (looksLikeErrorDocument(contentType, sampleText)) {
-    return false;
+    return { ok: false, hardFail: true };
   }
 
   if (looksLikeHls(url, contentType)) {
-    return !sampleText || sampleText.includes("#EXTM3U");
+    return { ok: !sampleText || sampleText.includes("#EXTM3U"), hardFail: !!sampleText && !sampleText.includes("#EXTM3U") };
   }
 
   const acceptRanges = response.headers.get("accept-ranges") || "";
   const contentRange = response.headers.get("content-range") || "";
-  return response.status === 206
+  return {
+    ok: response.status === 206
     || /bytes/i.test(acceptRanges)
-    || /^bytes\s+/i.test(contentRange);
+    || /^bytes\s+/i.test(contentRange),
+    hardFail: false
+  };
 }
 
 function streamRequestHeaders(stream) {
@@ -193,8 +207,9 @@ async function probeStream(stream) {
     `${stream.name} probe`
   );
   const sampleText = await responseSampleText(getResponse);
-  if (responseIsSeekable(getResponse, stream.url, sampleText)) {
-    return true;
+  const getProbe = responseProbeResult(getResponse, stream.url, sampleText);
+  if (getProbe.ok || getProbe.hardFail) {
+    return getProbe;
   }
 
   const headResponse = await withTimeout(
@@ -206,7 +221,7 @@ async function probeStream(stream) {
     STREAM_PROBE_TIMEOUT_MS,
     `${stream.name} head probe`
   );
-  return responseIsSeekable(headResponse, stream.url);
+  return responseProbeResult(headResponse, stream.url);
 }
 
 async function filterPlayableStreams(streams) {
@@ -218,13 +233,18 @@ async function filterPlayableStreams(streams) {
       const stream = streams[nextIndex];
       nextIndex += 1;
       try {
-        if (await probeStream(stream)) {
+        const probe = await probeStream(stream);
+        if (probe.ok || (!probe.hardFail && looksLikeDirectMediaUrl(stream.url))) {
           filtered.push(stream);
         } else {
           console.log(`[Stream probe] Rejected unplayable source: ${stream.name}`);
         }
       } catch (error) {
-        console.log(`[Stream probe] Rejected ${stream.name}: ${error.message || error}`);
+        if (looksLikeDirectMediaUrl(stream.url)) {
+          filtered.push(stream);
+        } else {
+          console.log(`[Stream probe] Rejected ${stream.name}: ${error.message || error}`);
+        }
       }
     }
   }
@@ -244,6 +264,7 @@ const UMBRELLA_PROVIDER_CODES = {
   "4khdhub_murph": "4KHH M",
   "hdhub4u": "HDHU DR",
   "hdhub4u_murph": "HDHU M",
+  "hdhub4u_yoruix": "HDHU Y",
   "hindmoviez": "HM",
   "movieblast": "MBL",
   "moviebox": "MB",
@@ -401,6 +422,20 @@ function umbrellaStreamName(rawStream, provider) {
   return ["Umbrella", providerCode, streamQualityLabel(rawStream), languageText].filter(Boolean).join(" | ");
 }
 
+function shouldKeepProviderStream(rawStream, provider) {
+  if (provider.id !== "movieblast") {
+    return true;
+  }
+
+  return /\bhindi\b/i.test([
+    rawStream.name,
+    rawStream.title,
+    rawStream.description,
+    rawStream.quality,
+    rawStream.language
+  ].filter(Boolean).join(" "));
+}
+
 function nameWithQuality(name, rawStream) {
   const quality = streamQualityLabel(rawStream);
   if (!quality || new RegExp(`\\b${quality}\\b`, "i").test(String(name || ""))) {
@@ -411,6 +446,10 @@ function nameWithQuality(name, rawStream) {
 
 function normalizeStream(rawStream, provider) {
   if (!rawStream || typeof rawStream !== "object") {
+    return null;
+  }
+
+  if (!shouldKeepProviderStream(rawStream, provider)) {
     return null;
   }
 
