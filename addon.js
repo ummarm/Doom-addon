@@ -5,7 +5,7 @@ const path = require("path");
 
 const ROOT = __dirname;
 const TMDB_API_KEY = process.env.TMDB_API_KEY || "439c478a771f35c05022f9feabcca01c";
-const DEFAULT_TIMEOUT_MS = Number(process.env.PROVIDER_TIMEOUT_MS || 25000);
+const DEFAULT_TIMEOUT_MS = Number(process.env.PROVIDER_TIMEOUT_MS || 45000);
 const STREAM_PROBE_TIMEOUT_MS = Number(process.env.STREAM_PROBE_TIMEOUT_MS || 8000);
 const STREAM_PROBE_CONCURRENCY = Number(process.env.STREAM_PROBE_CONCURRENCY || 6);
 
@@ -240,9 +240,10 @@ async function filterPlayableStreams(streams) {
 const UMBRELLA_STREAM_LABELS = {
   "4khdhub": "4K DR",
   "4khdhubtv": "4K DR",
-  "4khdhub_yoruix": "4K Y",
-  "4khdhub_murph": "4K HHM"
+  "4khdhub_yoruix": "4K Y"
 };
+const MURPH_PROVIDER_IDS = new Set(["4khdhub_murph", "hdhub4u_murph"]);
+const KNOWN_AUDIO_LABELS = ["Hindi", "Tamil", "Telugu", "English", "Malayalam", "Kannada", "Punjabi"];
 
 function parseSizeToBytes(value) {
   if (typeof value === "number" && Number.isFinite(value) && value > 0) {
@@ -285,15 +286,66 @@ function streamSizeBytes(stream) {
     || parseSizeToBytes(stream.name);
 }
 
+function has4KSignal(rawStream, provider) {
+  return /\b(?:4k|2160p)\b/i.test([
+    rawStream.quality,
+    rawStream.behaviorHints && rawStream.behaviorHints.bingeGroup
+  ].filter(Boolean).join(" "));
+}
+
+function umbrellaProviderCode(rawStream, provider) {
+  if (MURPH_PROVIDER_IDS.has(provider.id)) {
+    return has4KSignal(rawStream, provider) ? "4K HHM" : "HHM";
+  }
+
+  return UMBRELLA_STREAM_LABELS[provider.id] || null;
+}
+
+function audioLabelsFromText(value) {
+  const text = String(value || "");
+  const labels = [];
+  const seen = new Set();
+
+  for (const label of KNOWN_AUDIO_LABELS) {
+    const match = new RegExp(`\\b${label}\\b`, "i").exec(text);
+    if (match && !seen.has(label.toLowerCase())) {
+      seen.add(label.toLowerCase());
+      labels.push({ label, index: match.index });
+    }
+  }
+
+  if (labels.length > 0) {
+    return labels
+      .sort((a, b) => a.index - b.index)
+      .map((item) => item.label)
+      .join(" - ");
+  }
+
+  if (/\bmulti(?:\s*audio)?\b/i.test(text)) {
+    return "Multi Audio";
+  }
+
+  return "";
+}
+
 function normalizeLanguageText(value) {
+  const knownAudio = audioLabelsFromText(value);
+  if (knownAudio) {
+    return knownAudio;
+  }
+
   const text = String(value || "")
     .replace(/\b4KHDHub\s+Murph\b/ig, "")
     .replace(/\b4KHDHub\s+Yoruix\b/ig, "")
+    .replace(/\bHDHub4u\s+Murph\b/ig, "")
+    .replace(/\bHDHub4u\b/ig, "")
     .replace(/\b4khdhub-tv\b/ig, "")
     .replace(/\b4KHDHub\b/ig, "")
     .replace(/\b4K\b/ig, "")
     .replace(/\b(?:2160p|1080p|720p|480p|360p|auto)\b/ig, "")
+    .replace(/\b(?:fsl|pixelserver|hubcloud|hubdrive|download|file|server)\b/ig, "")
     .replace(/[|:()[\]]/g, " ")
+    .replace(/[^\p{L}\p{N}\s-]/gu, " ")
     .replace(/\s*-\s*/g, " - ")
     .replace(/^\s*-\s*|\s*-\s*$/g, "")
     .replace(/\s+/g, " ")
@@ -314,7 +366,7 @@ function normalizeLanguageText(value) {
 }
 
 function umbrellaStreamName(rawStream, provider) {
-  const providerCode = UMBRELLA_STREAM_LABELS[provider.id];
+  const providerCode = umbrellaProviderCode(rawStream, provider);
   if (!providerCode) {
     return null;
   }
