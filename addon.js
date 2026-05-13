@@ -103,6 +103,49 @@ function looksWebReady(url) {
   return /^https:\/\//i.test(url) && /\.mp4(?:[?#].*)?$/i.test(url);
 }
 
+const UMBRELLA_STREAM_LABELS = {
+  "4khdhub": "4K HH",
+  "4khdhub_murph": "4K HHM"
+};
+
+function normalizeLanguageText(value) {
+  const text = String(value || "")
+    .replace(/\b4KHDHub\s+Murph\b/ig, "")
+    .replace(/\b4KHDHub\b/ig, "")
+    .replace(/\b4K\b/ig, "")
+    .replace(/\b(?:2160p|1080p|720p|480p|360p|auto)\b/ig, "")
+    .replace(/[|:()[\]]/g, " ")
+    .replace(/\s*-\s*/g, " - ")
+    .replace(/^\s*-\s*|\s*-\s*$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const languages = [];
+  const seen = new Set();
+  for (const part of text.split(/\s+-\s+|[,/]+|\s+\|\s+/)) {
+    const normalized = part.trim();
+    if (!normalized || /\d/.test(normalized)) continue;
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    languages.push(normalized.replace(/\b\w/g, (char) => char.toUpperCase()));
+  }
+
+  return languages.join(" - ");
+}
+
+function umbrellaStreamName(rawStream, provider) {
+  const providerCode = UMBRELLA_STREAM_LABELS[provider.id];
+  if (!providerCode) {
+    return null;
+  }
+
+  const sourceName = rawStream.name || "";
+  const sourceTitle = rawStream.title || rawStream.description || "";
+  const languageText = normalizeLanguageText(sourceName) || normalizeLanguageText(sourceTitle);
+  return ["Umbrella", providerCode, languageText].filter(Boolean).join(" | ");
+}
+
 function normalizeStream(rawStream, provider) {
   if (!rawStream || typeof rawStream !== "object") {
     return null;
@@ -138,7 +181,7 @@ function normalizeStream(rawStream, provider) {
   }
 
   return {
-    name: rawStream.name || nameParts.join(" | ") || provider.name,
+    name: umbrellaStreamName(rawStream, provider) || rawStream.name || nameParts.join(" | ") || provider.name,
     title: description,
     description,
     url: targetUrl,
