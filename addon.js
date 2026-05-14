@@ -114,6 +114,16 @@ function looksLikeHls(url, contentType = "") {
     || normalizedType.includes("vnd.apple.mpegurl");
 }
 
+function isKnownClientBoundUrl(url) {
+  try {
+    const parsed = new URL(url);
+    return /^ddl\d*$/i.test(parsed.hostname.split(".")[0] || "")
+      && parsed.hostname.toLowerCase().endsWith(".workers.dev");
+  } catch {
+    return false;
+  }
+}
+
 function looksLikeErrorDocument(contentType, sampleText = "") {
   const normalizedType = String(contentType || "").toLowerCase();
   const sample = String(sampleText || "").trim().slice(0, 256).toLowerCase();
@@ -127,15 +137,58 @@ function looksLikeErrorDocument(contentType, sampleText = "") {
     || sample.includes("<title>error")
     || sample.includes("cloudflare")
     || sample.includes("access denied")
-    || sample.includes("not found");
+    || sample.includes("not found")
+    || sample.includes("invalid link")
+    || sample.includes("generate link again")
+    || sample.includes("link expired");
 }
 
-function responseProbeResult(response, url, sampleText = "") {
+function hasBoxSignature(sampleBuffer, signature) {
+  if (!sampleBuffer || sampleBuffer.length < 12) {
+    return false;
+  }
+  return sampleBuffer.includes(Buffer.from(signature), 4);
+}
+
+function looksLikeMediaBytes(url, contentType, sampleBuffer) {
+  if (!sampleBuffer || sampleBuffer.length < 4) {
+    return false;
+  }
+
+  const normalizedUrl = String(url || "").toLowerCase();
+  const normalizedType = String(contentType || "").toLowerCase();
+  const startsWith = (hex) => sampleBuffer.subarray(0, hex.length / 2).equals(Buffer.from(hex, "hex"));
+
+  if (startsWith("1a45dfa3")) {
+    return true;
+  }
+  if (hasBoxSignature(sampleBuffer, "ftyp") || hasBoxSignature(sampleBuffer, "styp")) {
+    return true;
+  }
+  if (sampleBuffer[0] === 0x47 && (sampleBuffer.length < 189 || sampleBuffer[188] === 0x47)) {
+    return true;
+  }
+  if (sampleBuffer.subarray(0, 4).toString("ascii") === "RIFF" && sampleBuffer.subarray(8, 12).toString("ascii") === "AVI ") {
+    return true;
+  }
+
+  const expectsKnownContainer = /\.(?:mkv|webm|mp4|m4v|ts|avi)(?:$|[?#])/i.test(normalizedUrl)
+    || normalizedType.includes("matroska")
+    || normalizedType.includes("webm")
+    || normalizedType.includes("mp4")
+    || normalizedType.includes("video/mp2t")
+    || normalizedType.includes("avi");
+  return !expectsKnownContainer && normalizedType.startsWith("video/");
+}
+
+function responseProbeResult(response, url, sample = {}) {
   if (!response || !response.ok) {
     return { ok: false };
   }
 
   const contentType = response.headers.get("content-type") || "";
+  const sampleText = sample.text || "";
+  const sampleBuffer = sample.buffer || Buffer.alloc(0);
   if (looksLikeHls(url, contentType)) {
     return { ok: !sampleText || sampleText.includes("#EXTM3U") };
   }
@@ -147,9 +200,10 @@ function responseProbeResult(response, url, sampleText = "") {
   const acceptRanges = response.headers.get("accept-ranges") || "";
   const contentRange = response.headers.get("content-range") || "";
   return {
-    ok: response.status === 206
-    || /bytes/i.test(acceptRanges)
-    || /^bytes\s+/i.test(contentRange)
+    ok: (response.status === 206
+      || /bytes/i.test(acceptRanges)
+      || /^bytes\s+/i.test(contentRange))
+      && looksLikeMediaBytes(url, contentType, sampleBuffer)
   };
 }
 
@@ -160,24 +214,29 @@ function streamRequestHeaders(stream) {
   return normalizeHeaders(proxyHeaders) || {};
 }
 
-async function responseSampleText(response) {
+async function responseSample(response) {
   if (!response.body || typeof response.body.getReader !== "function") {
-    return "";
+    return { buffer: Buffer.alloc(0), text: "" };
   }
 
   const reader = response.body.getReader();
   try {
     const chunk = await reader.read();
     if (!chunk.value) {
-      return "";
+      return { buffer: Buffer.alloc(0), text: "" };
     }
-    return Buffer.from(chunk.value).slice(0, 512).toString("utf8");
+    const buffer = Buffer.from(chunk.value).slice(0, 512);
+    return { buffer, text: buffer.toString("utf8") };
   } finally {
     await reader.cancel().catch(() => {});
   }
 }
 
 async function probeStream(stream) {
+  if (isKnownClientBoundUrl(stream.url)) {
+    return { ok: false };
+  }
+
   const headers = streamRequestHeaders(stream);
   const isHls = looksLikeHls(stream.url);
   const rangedHeaders = Object.assign({}, headers);
@@ -194,8 +253,8 @@ async function probeStream(stream) {
     STREAM_PROBE_TIMEOUT_MS,
     `${stream.name} probe`
   );
-  const sampleText = await responseSampleText(getResponse);
-  const getProbe = responseProbeResult(getResponse, stream.url, sampleText);
+  const sample = await responseSample(getResponse);
+  const getProbe = responseProbeResult(getResponse, stream.url, sample);
   if (getProbe.ok) {
     return getProbe;
   }
