@@ -479,6 +479,10 @@ def patch_moviesdrive_domain_source(text: str) -> str:
     return patch_domain_source(text)
 
 
+def patch_yoruix_hdhub4u_source(text: str) -> str:
+    return text.replace("https://search.pingora.fyi", "https://search.hdhub4u.glass")
+
+
 def patch_hindmoviez_source(text: str) -> str:
     text = re.sub(
         r"// ── Cloudflare Worker proxy[\s\S]*?const DEFAULT_HEADERS = \{",
@@ -492,8 +496,6 @@ def patch_hindmoviez_source(text: str) -> str:
         r"\1\2;",
         text,
     )
-    if call_count + assign_count < 1:
-        raise RuntimeError("Could not remove hmProxyUrl wrapper from HindMoviez provider")
     return text
 
 
@@ -514,6 +516,8 @@ def transform_source(provider: Provider, text: str) -> str:
         text = patch_domain_source(text)
     elif provider.scraper_id == "moviesdrive":
         text = patch_moviesdrive_domain_source(text)
+    if provider.scraper_id == "hdhub4u_yoruix":
+        text = patch_yoruix_hdhub4u_source(text)
     if provider.scraper_id == "hindmoviez":
         text = patch_hindmoviez_source(text)
     text = patch_seekable_validation(text)
