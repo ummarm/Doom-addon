@@ -63,7 +63,7 @@ Flix-Streams wrappers use the configured Flix-Streams manifest URL. The checked-
 default can be overridden if the token changes:
 
 ```sh
-FLIX_STREAMS_MANIFEST_URL=https://flixnest.app/flix-streams/u/<token>/manifest.json npm start
+FLIX_STREAMS_MANIFEST_URL=https://flixnest.app/flix-streams/<token>/manifest.json npm start
 ```
 
 ## Deploy

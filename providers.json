@@ -1,6 +1,6 @@
 {
   "name": "Doom-addon",
-  "version": "1.0.30",
+  "version": "1.0.31",
   "scrapers": [
     {
       "id": "4khdhub",
@@ -136,7 +136,7 @@
       "id": "flix_streams_emby",
       "name": "Flix-Streams Emby",
       "description": "Emby media library results wrapped from the configured Flix-Streams add-on",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "author": "ummarm",
       "supportedTypes": [
         "movie",
@@ -159,7 +159,7 @@
       "id": "flix_streams_vegamovies",
       "name": "Flix-Streams VegaMovies",
       "description": "VegaMovies results wrapped from the configured Flix-Streams add-on",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "author": "ummarm",
       "supportedTypes": [
         "movie",
