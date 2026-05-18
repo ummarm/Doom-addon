@@ -1,7 +1,7 @@
 "use strict";
 
 const PROVIDER_NAME = "Flix-Streams VegaMovies";
-const DEFAULT_MANIFEST_URL = "https://flixnest.app/flix-streams/eyJjIjo1LCJlIjoidW1tYXJtYXNyb29yQGdtYWlsLmNvbSIsInAiOiJsaWZldGltZV81IiwidiI6Mn0.6BPJR4tzNqFKIn9hsxPn0X9GE97UxgJxs4j3f5kAg8k/manifest.json";
+const DEFAULT_MANIFEST_URL = "https://flixnest.app/flix-streams/u/6p9xzp78nunz/manifest.json";
 
 function configuredBaseUrl() {
   const raw = process.env.FLIX_STREAMS_MANIFEST_URL || process.env.FLIX_STREAMS_BASE_URL || DEFAULT_MANIFEST_URL;

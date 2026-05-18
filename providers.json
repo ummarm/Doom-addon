@@ -1,6 +1,6 @@
 {
   "name": "Doom-addon",
-  "version": "1.0.31",
+  "version": "1.0.32",
   "scrapers": [
     {
       "id": "4khdhub",
@@ -90,7 +90,7 @@
       "id": "hdhub4u_murph",
       "name": "HDHub4u Murph",
       "description": "Wrapper for HDHub4u results exposed by Murph's Streams",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "author": "ummarm",
       "supportedTypes": [
         "movie",
@@ -113,7 +113,7 @@
       "id": "hdhub4u_yoruix",
       "name": "HDHub4u Yoruix",
       "description": "Alternate HDHub4u implementation synced from yoruix/nuvio-providers",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "author": "ummarm",
       "supportedTypes": [
         "movie",
