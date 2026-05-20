@@ -394,6 +394,22 @@ const UMBRELLA_PROVIDER_CODES = {
   "streamflix": "SF"
 };
 const KNOWN_AUDIO_LABELS = ["Hindi", "Tamil", "Telugu", "English", "Malayalam", "Kannada", "Punjabi"];
+const SOURCE_DETAIL_NAMES = {
+  "4khdhub": "D3adlyRocket",
+  "4khdhubtv": "D3adlyRocket",
+  "4khdhub_yoruix": "Yoruix",
+  "4khdhub_murph": "Murph Streams",
+  "hdhub4u": "D3adlyRocket",
+  "hdhub4u_murph": "Murph Streams",
+  "hdhub4u_yoruix": "Yoruix",
+  "flix_streams_emby": "Flix-Streams Emby",
+  "flix_streams_vegamovies": "Flix-Streams VegaMovies",
+  "hindmoviez": "HindMoviez",
+  "movieblast": "MovieBlast",
+  "moviebox": "MovieBox",
+  "moviesdrive": "MoviesDrive",
+  "streamflix": "Streamflix"
+};
 
 function parseSizeToBytes(value) {
   if (typeof value === "number" && Number.isFinite(value) && value > 0) {
@@ -434,6 +450,183 @@ function streamSizeBytes(stream) {
     || parseSizeToBytes(stream.description)
     || parseSizeToBytes(stream.title)
     || parseSizeToBytes(stream.name);
+}
+
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return "";
+  }
+
+  const gb = bytes / (1024 ** 3);
+  if (gb >= 1) {
+    return `${gb.toFixed(gb >= 10 ? 1 : 2).replace(/(\.\d*[1-9])0+$/, "$1").replace(/\.0+$/, "")}GB`;
+  }
+
+  const mb = bytes / (1024 ** 2);
+  if (mb >= 1) {
+    return `${mb.toFixed(mb >= 10 ? 0 : 1).replace(/(\.\d*[1-9])0+$/, "$1").replace(/\.0+$/, "")}MB`;
+  }
+
+  return `${Math.round(bytes / 1024)}KB`;
+}
+
+function firstMatch(text, pattern) {
+  const match = String(text || "").match(pattern);
+  return match ? match[1] || match[0] : "";
+}
+
+function cleanDetailText(value) {
+  return String(value || "")
+    .replace(/^[^\p{L}\p{N}]+/u, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function rawStreamText(rawStream) {
+  return [
+    rawStream.fileName,
+    rawStream.name,
+    rawStream.title,
+    rawStream.description,
+    rawStream.quality,
+    rawStream.language,
+    rawStream.size
+  ].filter(Boolean).join("\n");
+}
+
+function streamFileName(rawStream) {
+  const behaviorHints = rawStream.behaviorHints || {};
+  const directName = rawStream.fileName || rawStream.filename || behaviorHints.filename;
+  if (directName) {
+    return cleanDetailText(directName);
+  }
+
+  const text = rawStreamText(rawStream);
+  const fileMatch = text.match(/[^\n\r]*\.(?:mkv|mp4|m4v|webm|avi)(?:\b|$)/i);
+  if (fileMatch) {
+    return cleanDetailText(fileMatch[0]);
+  }
+
+  const titleLine = String(rawStream.title || rawStream.description || "")
+    .split(/\r?\n/)
+    .map(cleanDetailText)
+    .find(Boolean);
+  return titleLine || "";
+}
+
+function streamReleaseType(rawStream) {
+  const text = rawStreamText(rawStream);
+  const match = text.match(/\b(REMUX|WEB[-\s.]?DL|WEBRip|BluRay|BRRip|BDRip|HDRip|DVDRip|HDTV|CAM|TS|PreDVDRip)\b/i);
+  if (!match) {
+    return "";
+  }
+
+  return match[1]
+    .replace(/web[-\s.]?dl/i, "WEB-DL")
+    .replace(/webrip/i, "WEBRip")
+    .replace(/bluray/i, "BluRay")
+    .replace(/brrip/i, "BRRip")
+    .replace(/bdrip/i, "BDRip")
+    .replace(/hdrip/i, "HDRip")
+    .replace(/dvdrip/i, "DVDRip")
+    .replace(/hdtv/i, "HDTV")
+    .replace(/predvdrip/i, "PreDVDRip")
+    .toUpperCase()
+    .replace("BLURAY", "BluRay")
+    .replace("WEBRIP", "WEBRip")
+    .replace("BRRIP", "BRRip")
+    .replace("BDRIP", "BDRip")
+    .replace("HDRIP", "HDRip")
+    .replace("DVDRIP", "DVDRip")
+    .replace("PREDVDRIP", "PreDVDRip");
+}
+
+function streamVideoDetail(rawStream) {
+  const text = rawStreamText(rawStream);
+  const parts = [];
+  const quality = streamQualityLabel(rawStream);
+  if (quality) {
+    parts.push(quality);
+  }
+
+  if (/\b(?:dolby\s*vision|dovi|dv)\b/i.test(text)) {
+    parts.push("Dolby Vision");
+  }
+  if (/\bHDR10\+?\b/i.test(text)) {
+    parts.push(firstMatch(text, /\b(HDR10\+?)\b/i).toUpperCase());
+  } else if (/\bHDR\b/i.test(text)) {
+    parts.push("HDR");
+  }
+  if (/\b10\s*bit\b|\b10bit\b/i.test(text)) {
+    parts.push("10bit");
+  }
+  if (/\bx265\b|\bhevc\b|\bh\.?265\b/i.test(text)) {
+    parts.push("x265/HEVC");
+  } else if (/\bx264\b|\bavc\b|\bh\.?264\b/i.test(text)) {
+    parts.push("x264/AVC");
+  } else if (/\bAV1\b/i.test(text)) {
+    parts.push("AV1");
+  }
+
+  return Array.from(new Set(parts)).join(" | ");
+}
+
+function streamAudioDetail(rawStream) {
+  const text = rawStreamText(rawStream);
+  const parts = [];
+
+  const codecPatterns = [
+    /\b(TrueHD(?:\s*Atmos)?)\b/i,
+    /\b(Dolby\s*Atmos|Atmos)\b/i,
+    /\b(DDP?[.\s-]*5\.1|DD\+?[.\s-]*5\.1|EAC3[.\s-]*5\.1)\b/i,
+    /\b(AAC[.\s-]*5\.1|AAC[.\s-]*2\.0|AAC)\b/i,
+    /\b(DTS(?:-HD)?(?:\s*MA)?(?:\s*5\.1)?)\b/i,
+    /\b(AC3[.\s-]*5\.1|AC3)\b/i
+  ];
+
+  for (const pattern of codecPatterns) {
+    const match = firstMatch(text, pattern);
+    if (match) {
+      parts.push(match
+        .replace(/^(DDP?|DD\+?|EAC3|AAC|AC3)[.\s-]*(\d\.\d)$/i, "$1 $2")
+        .replace(/\s+/g, " ")
+        .replace(/^ddp/i, "DDP")
+        .replace(/^dd/i, "DD")
+        .replace(/^eac3/i, "EAC3")
+        .replace(/^aac/i, "AAC")
+        .replace(/^ac3/i, "AC3"));
+      break;
+    }
+  }
+
+  const audio = audioLabelsFromText(text);
+  if (audio) {
+    parts.push(audio);
+  }
+
+  return Array.from(new Set(parts)).join(" | ");
+}
+
+function providerDetailName(provider) {
+  return SOURCE_DETAIL_NAMES[provider.id] || provider.name;
+}
+
+function streamDetailDescription(rawStream, provider) {
+  const lines = [];
+  const filename = streamFileName(rawStream);
+  const releaseType = streamReleaseType(rawStream);
+  const videoDetail = streamVideoDetail(rawStream);
+  const audioDetail = streamAudioDetail(rawStream);
+  const size = formatBytes(streamSizeBytes(rawStream)) || cleanDetailText(rawStream.size);
+
+  if (filename) lines.push(`📽️ ${filename}`);
+  if (releaseType) lines.push(`📀 ${releaseType}`);
+  if (videoDetail) lines.push(`🎬 ${videoDetail}`);
+  if (audioDetail) lines.push(`🔊 ${audioDetail}`);
+  if (size) lines.push(`💾 ${size}`);
+  lines.push(`⚡ ${providerDetailName(provider)}`);
+
+  return lines.join("\n");
 }
 
 function streamQualityLabel(rawStream) {
@@ -587,12 +780,14 @@ function normalizeStream(rawStream, provider) {
   const requestHeaders = normalizeHeaders(rawStream.headers);
   const quality = rawStream.quality || "";
   const nameParts = [provider.name, quality].filter(Boolean);
-  const description = rawStream.description || rawStream.title || nameParts.join(" | ");
   const behaviorHints = Object.assign({}, rawStream.behaviorHints || {});
   const detectedSize = streamSizeBytes(rawStream);
+  const detailDescription = streamDetailDescription(rawStream, provider);
+  const description = detailDescription || rawStream.description || rawStream.title || nameParts.join(" | ");
+  const filename = streamFileName(rawStream);
 
-  if (rawStream.fileName && !behaviorHints.filename) {
-    behaviorHints.filename = rawStream.fileName;
+  if (filename && !behaviorHints.filename) {
+    behaviorHints.filename = filename;
   }
   if (detectedSize > 0 && !behaviorHints.videoSize) {
     behaviorHints.videoSize = detectedSize;
