@@ -66,6 +66,13 @@ opens faster. The default cache TTL is 10 minutes and can be changed with:
 STREAM_CACHE_TTL_MS=600000 npm start
 ```
 
+The add-on also returns an early TV-safe stream batch while slower providers keep
+finishing in the background. The default early provider wait is 12 seconds:
+
+```sh
+STREAM_FAST_PROVIDER_WAIT_MS=12000 npm start
+```
+
 Flix-Streams wrappers use the configured Flix-Streams manifest URL. The checked-in
 default can be overridden if the token changes:
 

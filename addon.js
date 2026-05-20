@@ -10,6 +10,8 @@ const STREAM_PROBE_TIMEOUT_MS = Number(process.env.STREAM_PROBE_TIMEOUT_MS || 80
 const STREAM_PROBE_CONCURRENCY = Number(process.env.STREAM_PROBE_CONCURRENCY || 6);
 const STREAM_CACHE_TTL_MS = Number(process.env.STREAM_CACHE_TTL_MS || 10 * 60 * 1000);
 const STREAM_CACHE_MAX_ENTRIES = Number(process.env.STREAM_CACHE_MAX_ENTRIES || 100);
+const STREAM_FAST_PROVIDER_WAIT_MS = Number(process.env.STREAM_FAST_PROVIDER_WAIT_MS || 12000);
+const STREAM_FAST_PROBE_TIMEOUT_MS = Number(process.env.STREAM_FAST_PROBE_TIMEOUT_MS || 2500);
 
 const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "manifest.json"), "utf8"));
 const providerRegistry = JSON.parse(fs.readFileSync(path.join(ROOT, "providers.json"), "utf8"));
@@ -67,6 +69,10 @@ function rememberStreams(key, streams) {
     const oldestKey = streamCache.keys().next().value;
     streamCache.delete(oldestKey);
   }
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function parseStremioId(type, id) {
@@ -157,6 +163,16 @@ function isKnownClientBoundUrl(url) {
       && parsed.hostname.toLowerCase().endsWith(".workers.dev");
   } catch {
     return false;
+  }
+}
+
+function isBlockedNavigationUrl(url) {
+  try {
+    const parsed = new URL(url);
+    const text = `${parsed.hostname} ${parsed.pathname} ${parsed.search}`.toLowerCase();
+    return /\b(?:login|logout|signin|signup|register|captcha|account)\b/.test(text);
+  } catch {
+    return true;
   }
 }
 
@@ -270,12 +286,23 @@ async function responseSample(response) {
   }
 }
 
-async function probeStream(stream) {
+function streamRequiresProbe(stream) {
+  return Boolean(stream.behaviorHints && stream.behaviorHints.doomProviderId === "hdhub4u_yoruix");
+}
+
+function isFastAcceptableStream(stream) {
+  return /^https:\/\//i.test(stream.url || "")
+    && !isKnownClientBoundUrl(stream.url)
+    && !isBlockedNavigationUrl(stream.url);
+}
+
+async function probeStream(stream, options = {}) {
   if (isKnownClientBoundUrl(stream.url)) {
     return { ok: false };
   }
 
-  const requireSeekable = stream.behaviorHints && stream.behaviorHints.doomProviderId === "hdhub4u_yoruix";
+  const timeoutMs = options.timeoutMs || STREAM_PROBE_TIMEOUT_MS;
+  const requireSeekable = streamRequiresProbe(stream);
   const headers = streamRequestHeaders(stream);
   const isHls = looksLikeHls(stream.url);
   const rangedHeaders = Object.assign({}, headers);
@@ -289,7 +316,7 @@ async function probeStream(stream) {
       headers: isHls ? headers : rangedHeaders,
       redirect: "follow"
     }),
-    STREAM_PROBE_TIMEOUT_MS,
+    timeoutMs,
     `${stream.name} probe`
   );
   const sample = await responseSample(getResponse);
@@ -304,22 +331,33 @@ async function probeStream(stream) {
       headers,
       redirect: "follow"
     }),
-    STREAM_PROBE_TIMEOUT_MS,
+    timeoutMs,
     `${stream.name} head probe`
   );
   return responseProbeResult(headResponse, stream.url, {}, { requireSeekable });
 }
 
-async function filterPlayableStreams(streams) {
+async function filterPlayableStreams(streams, options = {}) {
   const filtered = [];
   let nextIndex = 0;
+  const probeOnlyRequired = Boolean(options.probeOnlyRequired);
+  const probeTimeoutMs = options.probeTimeoutMs || STREAM_PROBE_TIMEOUT_MS;
 
   async function worker() {
     while (nextIndex < streams.length) {
       const stream = streams[nextIndex];
       nextIndex += 1;
       try {
-        const probe = await probeStream(stream);
+        if (probeOnlyRequired && !streamRequiresProbe(stream)) {
+          if (isFastAcceptableStream(stream)) {
+            filtered.push(stream);
+          } else {
+            console.log(`[Stream probe] Rejected unlikely source: ${stream.name}`);
+          }
+          continue;
+        }
+
+        const probe = await probeStream(stream, { timeoutMs: probeTimeoutMs });
         if (probe.ok) {
           filtered.push(stream);
         } else {
@@ -609,48 +647,54 @@ async function withTimeout(promise, ms, label) {
   }
 }
 
-async function buildStreams(type, id) {
-  const parsed = parseStremioId(type, id);
-  if (!parsed) {
-    return [];
-  }
-
-  let tmdbId;
-  try {
-    tmdbId = await resolveTmdbId(parsed.imdbId, parsed.mediaType);
-    if (!tmdbId) {
-      return [];
-    }
-  } catch (error) {
-    console.error(`[TMDB] ${error.message || error}`);
-    return [];
-  }
-
-  const providerResults = await Promise.allSettled(
-    providerEntries.map(async (provider) => {
-      const providerGetStreams = loadProvider(provider);
-      const rawStreams = await withTimeout(
-        Promise.resolve(providerGetStreams(tmdbId, parsed.mediaType, parsed.season, parsed.episode)),
-        DEFAULT_TIMEOUT_MS,
-        provider.name
-      );
-
-      return (Array.isArray(rawStreams) ? rawStreams : [])
-        .map((stream) => normalizeStream(stream, provider))
-        .filter(Boolean);
-    })
+async function collectProviderStreams(provider, parsed, tmdbId) {
+  const providerGetStreams = loadProvider(provider);
+  const rawStreams = await withTimeout(
+    Promise.resolve(providerGetStreams(tmdbId, parsed.mediaType, parsed.season, parsed.episode)),
+    DEFAULT_TIMEOUT_MS,
+    provider.name
   );
 
-  const streams = providerResults.flatMap((result, index) => {
+  return (Array.isArray(rawStreams) ? rawStreams : [])
+    .map((stream) => normalizeStream(stream, provider))
+    .filter(Boolean);
+}
+
+function startProviderCollection(parsed, tmdbId) {
+  const results = [];
+  const tasks = providerEntries.map((provider, index) => (
+    collectProviderStreams(provider, parsed, tmdbId)
+      .then((value) => {
+        results[index] = { status: "fulfilled", value };
+      })
+      .catch((reason) => {
+        results[index] = { status: "rejected", reason };
+      })
+  ));
+
+  const donePromise = Promise.allSettled(tasks).then(() => results);
+  return { results, donePromise };
+}
+
+function streamsFromProviderResults(providerResults, options = {}) {
+  const logFailures = options.logFailures !== false;
+  return providerResults.flatMap((result, index) => {
+    if (!result) {
+      return [];
+    }
     if (result.status === "fulfilled") {
       return result.value;
     }
-    console.error(`[${providerEntries[index].name}] ${result.reason.message || result.reason}`);
+    if (logFailures) {
+      const provider = providerEntries[index] || { name: "Provider" };
+      console.error(`[${provider.name}] ${result.reason.message || result.reason}`);
+    }
     return [];
   });
+}
 
-  const playableStreams = await filterPlayableStreams(dedupeStreams(streams));
-  return playableStreams.sort((a, b) => {
+function sortStreams(streams) {
+  return streams.sort((a, b) => {
     const sizeA = streamSizeBytes(a);
     const sizeB = streamSizeBytes(b);
     if (sizeA && sizeB && sizeA !== sizeB) {
@@ -665,6 +709,35 @@ async function buildStreams(type, id) {
   });
 }
 
+async function finalizeStreams(providerResults, options = {}) {
+  const streams = streamsFromProviderResults(providerResults, { logFailures: options.logFailures });
+  const playableStreams = await filterPlayableStreams(dedupeStreams(streams), {
+    probeOnlyRequired: options.probeOnlyRequired,
+    probeTimeoutMs: options.probeTimeoutMs
+  });
+  return sortStreams(playableStreams);
+}
+
+async function startStreamBuild(type, id) {
+  const parsed = parseStremioId(type, id);
+  if (!parsed) {
+    return null;
+  }
+
+  let tmdbId;
+  try {
+    tmdbId = await resolveTmdbId(parsed.imdbId, parsed.mediaType);
+    if (!tmdbId) {
+      return null;
+    }
+  } catch (error) {
+    console.error(`[TMDB] ${error.message || error}`);
+    return null;
+  }
+
+  return startProviderCollection(parsed, tmdbId);
+}
+
 async function getStreams(type, id) {
   const key = streamCacheKey(type, id);
   const cached = cachedStreams(key);
@@ -675,20 +748,63 @@ async function getStreams(type, id) {
 
   if (streamInflight.has(key)) {
     console.log(`[Stream cache] Joining in-flight request for ${key}`);
-    return streamInflight.get(key);
+    const inFlight = streamInflight.get(key);
+    return inFlight.fastPromise;
   }
 
-  const request = buildStreams(type, id)
+  const buildStatePromise = startStreamBuild(type, id);
+  const fullPromise = buildStatePromise
+    .then(async (state) => {
+      if (!state) {
+        return [];
+      }
+      await state.donePromise;
+      return finalizeStreams(state.results, { logFailures: true });
+    })
     .then((streams) => {
       rememberStreams(key, streams);
       return streams;
+    })
+    .catch((error) => {
+      console.error(`[Stream build] ${key}: ${error.message || error}`);
+      return [];
     })
     .finally(() => {
       streamInflight.delete(key);
     });
 
-  streamInflight.set(key, request);
-  return request;
+  const fastPromise = buildStatePromise
+    .then(async (state) => {
+      if (!state) {
+        return [];
+      }
+
+      await Promise.race([
+        state.donePromise,
+        delay(Math.max(0, STREAM_FAST_PROVIDER_WAIT_MS))
+      ]);
+
+      const providerResults = state.results.filter(Boolean);
+      const streams = await finalizeStreams(providerResults, {
+        logFailures: false,
+        probeOnlyRequired: true,
+        probeTimeoutMs: STREAM_FAST_PROBE_TIMEOUT_MS
+      });
+
+      if (streams.length > 0) {
+        console.log(`[Stream fast] Returning ${streams.length} early streams for ${key}`);
+        return streams;
+      }
+
+      return fullPromise;
+    })
+    .catch((error) => {
+      console.error(`[Stream fast] ${key}: ${error.message || error}`);
+      return fullPromise;
+    });
+
+  streamInflight.set(key, { fullPromise, fastPromise });
+  return Promise.race([fullPromise, fastPromise]);
 }
 
 module.exports = {
