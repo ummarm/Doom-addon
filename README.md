@@ -9,7 +9,7 @@ upstream sources directly:
 - `4KHDHub Yoruix`
 - `HDHub4u Murph`
 - `Flix-Streams Emby`
-- `Flix-Streams VegaMovies`
+- `Flix-Streams MkvCinemas`
 - `HindMoviez`
 - `MovieBlast`
 - `4KHDHub Murph`
@@ -31,6 +31,7 @@ every enabled provider, merges the results, and returns Stremio stream objects.
 - `providers/hdhub4u.js`
 - `providers/hdhub4u_murph.js`
 - `providers/flix_streams_emby.js`
+- `providers/flix_streams_mkvcinemas.js`
 - `providers/flix_streams_vegamovies.js`
 - `providers/hindmoviez.js`
 - `providers/movieblast.js`
@@ -108,8 +109,10 @@ The stream endpoint shape is:
   `domains.json`.
 - `HindMoviez` returns resolved direct URLs instead of relying on the upstream
   Cloudflare worker.
-- `Flix-Streams Emby` and `Flix-Streams VegaMovies` wrap the configured
+- `Flix-Streams Emby` and `Flix-Streams MkvCinemas` wrap the configured
   Flix-Streams add-on URL and do not sync from the GitHub upstream providers.
+- `Flix-Streams VegaMovies` is kept in the repo but currently disabled because
+  those Flixnest links are not working reliably.
 - `StreamFlix` is kept in the repo but currently disabled and paused from
   upstream sync.
 - Provider results keep Doom-addon's working-and-seekable stream validation
@@ -147,6 +150,7 @@ Tracked upstream provider files:
 - `providers/hdhub4u.js`
 - `providers/hdhub4u_murph.js`
 - `providers/flix_streams_emby.js`
+- `providers/flix_streams_mkvcinemas.js`
 - `providers/flix_streams_vegamovies.js`
 - `providers/hindmoviez.js`
 - `providers/movieblast.js`

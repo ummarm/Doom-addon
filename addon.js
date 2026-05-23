@@ -413,6 +413,7 @@ const UMBRELLA_PROVIDER_CODES = {
   "hdhub4u_murph": "HDHU M",
   "hdhub4u_yoruix": "HDHU Y",
   "flix_streams_emby": "EMB",
+  "flix_streams_mkvcinemas": "MKV",
   "flix_streams_vegamovies": "VG",
   "hindmoviez": "HM",
   "movieblast": "MBL",
@@ -430,6 +431,7 @@ const SOURCE_DETAIL_NAMES = {
   "hdhub4u_murph": "Murph Streams",
   "hdhub4u_yoruix": "Darth Vader",
   "flix_streams_emby": "Darth Vader",
+  "flix_streams_mkvcinemas": "Darth Vader",
   "flix_streams_vegamovies": "Darth Vader",
   "hindmoviez": "Darth Vader",
   "movieblast": "Darth Vader",
@@ -842,6 +844,8 @@ function normalizeLanguageText(value) {
     .replace(/\bFlix-Streams\b/ig, "")
     .replace(/\bMedia\s+Library\b/ig, "")
     .replace(/\bEmby\b/ig, "")
+    .replace(/\bMkv\s*Cinemas\b/ig, "")
+    .replace(/\bMkvCinemas\b/ig, "")
     .replace(/\bVegaMovies\b/ig, "")
     .replace(/\b4K\b/ig, "")
     .replace(/\b(?:2160p|1080p|720p|480p|360p|auto)\b/ig, "")
