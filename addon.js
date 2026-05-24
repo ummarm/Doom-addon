@@ -464,6 +464,9 @@ const UMBRELLA_PROVIDER_CODES = {
   "moviesdrive": "MD",
   "streamflix": "SF"
 };
+const DETAIL_PROVIDER_CODES = Object.assign({}, UMBRELLA_PROVIDER_CODES, {
+  "flix_streams_mkvcinemas": "MKV Direct"
+});
 const KNOWN_AUDIO_LABELS = ["Hindi", "Tamil", "Telugu", "English", "Malayalam", "Kannada", "Punjabi"];
 const SOURCE_DETAIL_NAMES = {
   "4khdhub": "Darth Vader",
@@ -830,6 +833,10 @@ function providerDetailName(provider) {
   return SOURCE_DETAIL_NAMES[provider.id] || (/murph/i.test(provider.name || provider.id || "") ? "Murph Streams" : "Darth Vader");
 }
 
+function detailProviderCode(provider) {
+  return DETAIL_PROVIDER_CODES[provider.id] || UMBRELLA_PROVIDER_CODES[provider.id] || "";
+}
+
 function streamDetailDescription(rawStream, provider) {
   const lines = [];
   const filename = streamFileName(rawStream);
@@ -843,7 +850,8 @@ function streamDetailDescription(rawStream, provider) {
   if (videoDetail) lines.push(`🎬 ${videoDetail}`);
   if (audioDetail) lines.push(`🔊 ${audioDetail}`);
   if (size) lines.push(`💾 ${size}`);
-  lines.push(`⚡ ${providerDetailName(provider)}`);
+  const sourceCode = detailProviderCode(provider);
+  lines.push(`⚡ ${[providerDetailName(provider), sourceCode].filter(Boolean).join(" - ")}`);
 
   return lines.join("\n");
 }
@@ -950,16 +958,35 @@ function normalizeLanguageText(value) {
   return languages.join(" - ");
 }
 
-function umbrellaStreamName(rawStream, provider) {
-  const providerCode = umbrellaProviderCode(rawStream, provider);
-  if (!providerCode) {
-    return null;
+function cleanDisplayTitle(value) {
+  return String(value || "")
+    .replace(/\.[a-z0-9]{2,4}$/i, "")
+    .replace(/\bimdb[-_\s]*tt\d+\b/ig, "")
+    .replace(/\btmdb[-_\s]*\d+\b/ig, "")
+    .replace(/\b(?:2160p|1080p|720p|480p|360p|4k)\b.*$/i, "")
+    .replace(/\b(?:WEB[-.\s]?DL|WEBRip|BluRay|BRRip|BDRip|HDRip|DVDRip|HDTV|REMUX)\b.*$/i, "")
+    .replace(/[-_.]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function streamDisplayTitle(rawStream, mediaInfo) {
+  const mediaTitle = cleanDisplayTitle(mediaInfo && mediaInfo.title);
+  if (mediaTitle) {
+    const year = mediaInfo && mediaInfo.year && !new RegExp(`\\b${mediaInfo.year}\\b`).test(mediaTitle)
+      ? mediaInfo.year
+      : "";
+    return [mediaTitle, year].filter(Boolean).join(" ");
   }
 
-  const sourceName = rawStream.name || "";
-  const sourceTitle = rawStream.title || rawStream.description || "";
-  const languageText = normalizeLanguageText(sourceName) || normalizeLanguageText(sourceTitle);
-  return ["Umbrella", providerCode, streamQualityLabel(rawStream), languageText].filter(Boolean).join(" | ");
+  return cleanDisplayTitle(streamFileName(rawStream))
+    || cleanDisplayTitle(rawStream.title)
+    || cleanDisplayTitle(rawStream.name)
+    || "Umbrella";
+}
+
+function cleanStreamName(rawStream, mediaInfo) {
+  return [streamDisplayTitle(rawStream, mediaInfo), streamQualityLabel(rawStream)].filter(Boolean).join(" | ");
 }
 
 function shouldKeepProviderStream(rawStream, provider) {
@@ -984,7 +1011,7 @@ function nameWithQuality(name, rawStream) {
   return [name, quality].filter(Boolean).join(" | ");
 }
 
-function normalizeStream(rawStream, provider) {
+function normalizeStream(rawStream, provider, mediaInfo) {
   if (!rawStream || typeof rawStream !== "object") {
     return null;
   }
@@ -1027,10 +1054,7 @@ function normalizeStream(rawStream, provider) {
   }
 
   return {
-    name: nameWithQuality(
-      umbrellaStreamName(rawStream, provider) || rawStream.name || nameParts.join(" | ") || provider.name,
-      rawStream
-    ),
+    name: cleanStreamName(rawStream, mediaInfo) || nameWithQuality(rawStream.name || nameParts.join(" | ") || provider.name, rawStream),
     title: description,
     description,
     url: targetUrl,
@@ -1085,7 +1109,7 @@ async function collectProviderStreams(provider, parsed, tmdbId, mediaInfo) {
 
   return (Array.isArray(rawStreams) ? rawStreams : [])
     .map((stream) => enrichTrustedProviderStream(stream, provider, mediaInfo))
-    .map((stream) => normalizeStream(stream, provider))
+    .map((stream) => normalizeStream(stream, provider, mediaInfo))
     .filter(Boolean);
 }
 
