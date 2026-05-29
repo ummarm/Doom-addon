@@ -70,7 +70,7 @@ const addonManifests = Object.fromEntries(
       id: `${manifest.id}.${slug}`,
       name: group.name,
       description: slug === "mediafusion"
-        ? `${group.name} provider group for Doom-addon. Passes MediaFusion streams through with only title matching, Hindi/English filtering, blocked source-tag filtering, and Hindi-first quality/size sorting.`
+        ? `${group.name} provider group for Doom-addon. Passes MediaFusion streams through with only Hindi/English detection, blocked source-tag filtering, and Hindi-first quality/size sorting.`
         : `${group.name} provider group for Doom-addon. Uses the same Umbrella formatting, filtering, sorting, and playable checks as the main add-on.`
     })
   ])
@@ -125,9 +125,6 @@ function hasBlockedMediaFusionTag(stream) {
 
 function hasAllowedMediaFusionLanguage(stream) {
   const text = mediaFusionStreamText(stream);
-  if (/\b(?:tamil|telugu|malayalam|kannada|punjabi|bengali|bangla|marathi|gujarati|urdu|spanish|french|german|italian|portuguese|russian|japanese|korean|chinese|mandarin|cantonese|arabic|thai|indonesian|turkish|polish|dutch|latino|latin|castellano|espanol|español)\b/i.test(text)) {
-    return false;
-  }
   return /\b(?:hindi|hin|english|eng)\b/i.test(text);
 }
 
@@ -1201,10 +1198,6 @@ async function collectProviderStreams(provider, parsed, tmdbId, mediaInfo) {
         }
         if (!hasAllowedMediaFusionLanguage(stream)) {
           console.log(`[MediaFusion] Rejected non Hindi/English stream: ${stream.name || stream.title || stream.url}`);
-          return false;
-        }
-        if (!matchesRequestedMedia(stream, mediaInfo, parsed)) {
-          console.log(`[MediaFusion] Rejected wrong-title stream: ${stream.name || stream.title || stream.url}`);
           return false;
         }
         return true;

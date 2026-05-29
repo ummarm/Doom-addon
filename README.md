@@ -103,10 +103,10 @@ MEDIAFUSION_MANIFEST_URL=https://mediafusion.elfhosted.com/<your-id>/manifest.js
 
 MediaFusion streams are passed through without Umbrella card formatting,
 playable probes, or de-duplication. The only MediaFusion-specific filters are
-requested-title matching and blocked source tags such as HDTC, HDTS, telesync,
-tele, telecine, and telecne. MediaFusion streams must also be Hindi or English.
-Results are ordered with Hindi-language streams first, then quality and size
-sorting.
+blocked source tags such as HDTC, HDTS, telesync, tele, telecine, and telecne.
+MediaFusion streams must mention Hindi or English, but dual-audio streams with
+other languages are kept when Hindi or English is present. Results are ordered
+with Hindi-language streams first, then quality and size sorting.
 
 ## Deploy
 
