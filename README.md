@@ -140,6 +140,10 @@ playable probes, blocked-tag filtering, or de-duplication. The only AIOStreams
 filter is Hindi/English detection, including common English/Hindi flags. Results
 use the same Hindi-first quality and size sorting.
 
+Peachify streams are language-filtered to Hindi/English and must pass the main
+playback probe before they are returned, so expired proxy/error responses are
+removed before Stremio receives them.
+
 ## Deploy
 
 This add-on is dynamic, so the raw GitHub URL is no longer enough for Stremio.
