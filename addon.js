@@ -51,7 +51,13 @@ const addonGroups = {
   },
   flixnest: {
     name: "Umbrella F",
-    providerIds: ["flix_streams_emby", "flix_streams_mkvcinemas", "flix_streams_vegamovies"]
+    providerIds: [
+      "flix_streams_emby",
+      "flix_streams_mkvcinemas",
+      "flix_streams_lotusvault",
+      "flix_streams_filesearchtools",
+      "flix_streams_vegamovies"
+    ]
   },
   mediafusion: {
     name: "Umbrella MF",
@@ -376,6 +382,18 @@ function isBlockedNavigationUrl(url) {
   }
 }
 
+function isDirectMediaUrl(url) {
+  try {
+    const parsed = new URL(url);
+    if (!/^https?:$/i.test(parsed.protocol)) {
+      return false;
+    }
+    return /\.(?:mp4|mkv|m4v|webm|avi|m3u8|ts)(?:$|[?#])/i.test(parsed.pathname);
+  } catch {
+    return false;
+  }
+}
+
 function looksLikeErrorDocument(contentType, sampleText = "") {
   const normalizedType = String(contentType || "").toLowerCase();
   const sample = String(sampleText || "").trim().slice(0, 256).toLowerCase();
@@ -461,6 +479,47 @@ function responseProbeResult(response, url, sample = {}, options = {}) {
   };
 }
 
+function contentRangeStart(response) {
+  const contentRange = response && response.headers && response.headers.get("content-range");
+  const match = String(contentRange || "").match(/^bytes\s+(\d+)-/i);
+  if (!match) {
+    return -1;
+  }
+  const start = Number(match[1]);
+  return Number.isFinite(start) ? start : -1;
+}
+
+function hardSeekOffset(stream) {
+  const size = streamSizeBytes(stream);
+  const minimumOffset = 1024 * 1024;
+  if (size > minimumOffset * 2) {
+    return Math.min(size - 4096, Math.max(minimumOffset, Math.floor(size * 0.35)));
+  }
+  return minimumOffset;
+}
+
+function hardSeekProbeResult(response, url, sample = {}, offset = 0) {
+  if (!response || !response.ok) {
+    return { ok: false };
+  }
+
+  const contentType = response.headers.get("content-type") || "";
+  const sampleText = sample.text || "";
+  const sampleBuffer = sample.buffer || Buffer.alloc(0);
+  if (looksLikeHls(url, contentType)) {
+    return { ok: !sampleText || sampleText.includes("#EXTM3U") };
+  }
+  if (looksLikeErrorDocument(contentType, sampleText)) {
+    return { ok: false };
+  }
+  if (response.status !== 206) {
+    return { ok: false };
+  }
+
+  const rangeStart = contentRangeStart(response);
+  return { ok: rangeStart === offset && sampleBuffer.length > 0 };
+}
+
 function streamRequestHeaders(stream) {
   const proxyHeaders = stream.behaviorHints
     && stream.behaviorHints.proxyHeaders
@@ -491,7 +550,7 @@ function streamRequiresProbe(stream) {
 }
 
 function isFastAcceptableStream(stream) {
-  return /^https:\/\//i.test(stream.url || "")
+  return (/^https:\/\//i.test(stream.url || "") || isDirectMediaUrl(stream.url || ""))
     && !isKnownClientBoundUrl(stream.url)
     && !isBlockedNavigationUrl(stream.url);
 }
@@ -522,7 +581,26 @@ async function probeStream(stream, options = {}) {
   const sample = await responseSample(getResponse);
   const getProbe = responseProbeResult(getResponse, stream.url, sample, { requireSeekable });
   if (getProbe.ok) {
+    if (requireSeekable && !isHls) {
+      const offset = hardSeekOffset(stream);
+      const seekHeaders = Object.assign({}, headers, { Range: `bytes=${offset}-${offset + 4095}` });
+      const seekResponse = await withTimeout(
+        fetch(stream.url, {
+          method: "GET",
+          headers: seekHeaders,
+          redirect: "follow"
+        }),
+        timeoutMs,
+        `${stream.name} seek probe`
+      );
+      const seekSample = await responseSample(seekResponse);
+      return hardSeekProbeResult(seekResponse, stream.url, seekSample, offset);
+    }
     return getProbe;
+  }
+
+  if (requireSeekable) {
+    return { ok: false };
   }
 
   const headResponse = await withTimeout(
@@ -587,6 +665,8 @@ const UMBRELLA_PROVIDER_CODES = {
   "hdhub4u_yoruix": "HDHU Y",
   "flix_streams_emby": "EMB",
   "flix_streams_mkvcinemas": "MKV",
+  "flix_streams_lotusvault": "LV",
+  "flix_streams_filesearchtools": "FST",
   "flix_streams_vegamovies": "VG",
   "mediafusion": "MF",
   "hindmoviez": "HM",
@@ -613,6 +693,8 @@ const SOURCE_DETAIL_NAMES = {
   "hdhub4u_yoruix": "Darth Vader",
   "flix_streams_emby": "Darth Vader",
   "flix_streams_mkvcinemas": "Darth Vader",
+  "flix_streams_lotusvault": "Darth Vader",
+  "flix_streams_filesearchtools": "Darth Vader",
   "flix_streams_vegamovies": "Darth Vader",
   "mediafusion": "Darth Vader",
   "hindmoviez": "Darth Vader",
@@ -732,7 +814,7 @@ const STREAM_DETAIL_IGNORE_WORDS = new Set([
   "dual", "dv", "dvd", "dvdrip", "eac3", "english", "esub", "file", "gb", "h264", "h265", "hd", "hdr", "hdrip",
   "hdhub4u", "hevc", "hindi", "hubcloud", "kbps", "mb", "mkv", "mkvcinemas", "cinemas", "moviebox", "multi",
   "original", "punjabi", "remux", "rip", "server", "stream", "tamil", "telugu", "truehd", "vader",
-  "web", "webdl", "webrip", "x264", "x265"
+  "web", "webdl", "webrip", "x264", "x265", "lotusvault", "filesearchtools", "container"
 ]);
 
 function titleTokens(value) {
@@ -1091,6 +1173,10 @@ function normalizeLanguageText(value) {
     .replace(/\bEmby\b/ig, "")
     .replace(/\bMkv\s*Cinemas\b/ig, "")
     .replace(/\bMkvCinemas\b/ig, "")
+    .replace(/\bLotus\s*Vault\b/ig, "")
+    .replace(/\bLotusVault\b/ig, "")
+    .replace(/\bFile\s*Search\s*Tools\b/ig, "")
+    .replace(/\bFileSearchTools\b/ig, "")
     .replace(/\bVegaMovies\b/ig, "")
     .replace(/\b4K\b/ig, "")
     .replace(/\b(?:2160p|1080p|720p|480p|360p|auto)\b/ig, "")
@@ -1252,7 +1338,12 @@ async function withTimeout(promise, ms, label) {
 }
 
 function enrichTrustedProviderStream(rawStream, provider, mediaInfo) {
-  const trustedTitleProviders = new Set(["moviebox", "movies4u_murph"]);
+  const trustedTitleProviders = new Set([
+    "moviebox",
+    "movies4u_murph",
+    "flix_streams_lotusvault",
+    "flix_streams_filesearchtools"
+  ]);
   if (!rawStream || !trustedTitleProviders.has(provider.id) || !mediaInfo || !mediaInfo.title) {
     return rawStream;
   }

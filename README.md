@@ -36,6 +36,8 @@ every enabled provider, merges the results, and returns Stremio stream objects.
 - `providers/hdhub4u_murph.js`
 - `providers/flix_streams_emby.js`
 - `providers/flix_streams_mkvcinemas.js`
+- `providers/flix_streams_lotusvault.js`
+- `providers/flix_streams_filesearchtools.js`
 - `providers/flix_streams_vegamovies.js`
 - `providers/mediafusion.js`
 - `providers/aiostreams.js`
@@ -99,6 +101,10 @@ default can be overridden if the token changes:
 ```sh
 FLIX_STREAMS_MANIFEST_URL=https://flixnest.app/flix-streams/u/<token>/manifest.json npm start
 ```
+
+The Flixnest group currently wraps Emby/Media Lib, MkvCinemas, LotusVault, and
+FileSearchTools streams from that configured Flix-Streams URL. VegaMovies stays
+registered but disabled because those links were previously marked unreliable.
 
 MediaFusion uses the configured MediaFusion manifest URL. The checked-in default
 can be overridden if the configured add-on URL changes:
@@ -210,6 +216,8 @@ Tracked upstream provider files:
 - `providers/hdhub4u_murph.js`
 - `providers/flix_streams_emby.js`
 - `providers/flix_streams_mkvcinemas.js`
+- `providers/flix_streams_lotusvault.js`
+- `providers/flix_streams_filesearchtools.js`
 - `providers/flix_streams_vegamovies.js`
 - `providers/hindmoviez.js`
 - `providers/movieblast.js`
