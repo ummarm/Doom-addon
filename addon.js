@@ -12,7 +12,7 @@ const STREAM_CACHE_TTL_MS = Number(process.env.STREAM_CACHE_TTL_MS || 10 * 60 * 
 const STREAM_CACHE_MAX_ENTRIES = Number(process.env.STREAM_CACHE_MAX_ENTRIES || 100);
 const STREAM_FAST_PROVIDER_WAIT_MS = Number(process.env.STREAM_FAST_PROVIDER_WAIT_MS || 25000);
 const STREAM_FAST_PROBE_TIMEOUT_MS = Number(process.env.STREAM_FAST_PROBE_TIMEOUT_MS || 2500);
-const MEDIAFUSION_PROBE_TIMEOUT_MS = Number(process.env.MEDIAFUSION_PROBE_TIMEOUT_MS || 5000);
+const MEDIAFUSION_PROBE_TIMEOUT_MS = Number(process.env.MEDIAFUSION_PROBE_TIMEOUT_MS || 8000);
 
 const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "manifest.json"), "utf8"));
 const providerRegistry = JSON.parse(fs.readFileSync(path.join(ROOT, "providers.json"), "utf8"));
@@ -187,8 +187,7 @@ async function filterMediaFusionStreams(streams) {
           console.log(`[MediaFusion] Rejected unplayable/cache-miss stream: ${stream.name || stream.title || stream.url} (${probe.reason})`);
         }
       } catch (error) {
-        console.log(`[MediaFusion] Could not verify stream, keeping: ${stream.name || stream.title || stream.url} (${error.message || error})`);
-        filtered.push(stream);
+        console.log(`[MediaFusion] Rejected unverifiable stream: ${stream.name || stream.title || stream.url} (${error.message || error})`);
       }
     }
   }
