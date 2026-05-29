@@ -105,7 +105,9 @@ MediaFusion streams are passed through without Umbrella card formatting,
 playable probes, or de-duplication. The only MediaFusion-specific filters are
 blocked source tags such as HDTC, HDTS, telesync, tele, telecine, and telecne.
 MediaFusion streams must mention Hindi or English, but dual-audio streams with
-other languages are kept when Hindi or English is present. Results are ordered
+other languages are kept when Hindi or English is present. MediaFusion streams
+are lightly probed to remove blocked playback URLs and tiny placeholder files
+that indicate a cache miss or "still downloading" response. Results are ordered
 with Hindi-language streams first, then quality and size sorting.
 
 ## Deploy

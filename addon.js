@@ -12,6 +12,7 @@ const STREAM_CACHE_TTL_MS = Number(process.env.STREAM_CACHE_TTL_MS || 10 * 60 * 
 const STREAM_CACHE_MAX_ENTRIES = Number(process.env.STREAM_CACHE_MAX_ENTRIES || 100);
 const STREAM_FAST_PROVIDER_WAIT_MS = Number(process.env.STREAM_FAST_PROVIDER_WAIT_MS || 25000);
 const STREAM_FAST_PROBE_TIMEOUT_MS = Number(process.env.STREAM_FAST_PROBE_TIMEOUT_MS || 2500);
+const MEDIAFUSION_PROBE_TIMEOUT_MS = Number(process.env.MEDIAFUSION_PROBE_TIMEOUT_MS || 5000);
 
 const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "manifest.json"), "utf8"));
 const providerRegistry = JSON.parse(fs.readFileSync(path.join(ROOT, "providers.json"), "utf8"));
@@ -70,7 +71,7 @@ const addonManifests = Object.fromEntries(
       id: `${manifest.id}.${slug}`,
       name: group.name,
       description: slug === "mediafusion"
-        ? `${group.name} provider group for Doom-addon. Passes MediaFusion streams through with only Hindi/English detection, blocked source-tag filtering, and Hindi-first quality/size sorting.`
+        ? `${group.name} provider group for Doom-addon. Passes MediaFusion streams through with Hindi/English detection, blocked source-tag filtering, cached/playable placeholder rejection, and Hindi-first quality/size sorting.`
         : `${group.name} provider group for Doom-addon. Uses the same Umbrella formatting, filtering, sorting, and playable checks as the main add-on.`
     })
   ])
@@ -126,6 +127,78 @@ function hasBlockedMediaFusionTag(stream) {
 function hasAllowedMediaFusionLanguage(stream) {
   const text = mediaFusionStreamText(stream);
   return /\b(?:hindi|hin|english|eng)\b/i.test(text);
+}
+
+function reportedResponseSize(response) {
+  const contentRange = response.headers.get("content-range") || "";
+  const rangeMatch = contentRange.match(/\/(\d+)\s*$/);
+  if (rangeMatch) {
+    return Number(rangeMatch[1]) || 0;
+  }
+
+  const contentLength = Number(response.headers.get("content-length") || 0);
+  return response.status === 200 && Number.isFinite(contentLength) ? contentLength : 0;
+}
+
+function isMediaFusionPlaceholder(response, stream) {
+  const expectedSize = streamSizeBytes(stream);
+  const reportedSize = reportedResponseSize(response);
+  if (!expectedSize || !reportedSize) {
+    return false;
+  }
+
+  return expectedSize > 50 * 1024 * 1024
+    && reportedSize < Math.min(expectedSize * 0.1, 50 * 1024 * 1024);
+}
+
+async function probeMediaFusionStream(stream) {
+  const headers = Object.assign({}, streamRequestHeaders(stream), { Range: "bytes=0-4095" });
+  const response = await withTimeout(
+    fetch(stream.url, {
+      method: "GET",
+      headers,
+      redirect: "follow"
+    }),
+    MEDIAFUSION_PROBE_TIMEOUT_MS,
+    `${stream.name || "MediaFusion stream"} probe`
+  );
+  const sample = await responseSample(response);
+  if (isMediaFusionPlaceholder(response, stream)) {
+    return { ok: false, reason: "placeholder or downloading response" };
+  }
+
+  const probe = responseProbeResult(response, stream.url, sample);
+  return probe.ok ? { ok: true } : { ok: false, reason: `HTTP ${response.status}` };
+}
+
+async function filterMediaFusionStreams(streams) {
+  const filtered = [];
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < streams.length) {
+      const stream = streams[nextIndex];
+      nextIndex += 1;
+      try {
+        const probe = await probeMediaFusionStream(stream);
+        if (probe.ok) {
+          filtered.push(stream);
+        } else {
+          console.log(`[MediaFusion] Rejected unplayable/cache-miss stream: ${stream.name || stream.title || stream.url} (${probe.reason})`);
+        }
+      } catch (error) {
+        console.log(`[MediaFusion] Could not verify stream, keeping: ${stream.name || stream.title || stream.url} (${error.message || error})`);
+        filtered.push(stream);
+      }
+    }
+  }
+
+  const workers = Array.from(
+    { length: Math.min(STREAM_PROBE_CONCURRENCY, streams.length) },
+    () => worker()
+  );
+  await Promise.all(workers);
+  return filtered;
 }
 
 function streamCacheKey(type, id, scope = "main") {
@@ -1189,7 +1262,7 @@ async function collectProviderStreams(provider, parsed, tmdbId, mediaInfo) {
   );
 
   if (isPassthroughProvider(provider)) {
-    return (Array.isArray(rawStreams) ? rawStreams : [])
+    const mediaFusionStreams = (Array.isArray(rawStreams) ? rawStreams : [])
       .filter((stream) => stream && stream.url)
       .filter((stream) => {
         if (hasBlockedMediaFusionTag(stream)) {
@@ -1201,8 +1274,8 @@ async function collectProviderStreams(provider, parsed, tmdbId, mediaInfo) {
           return false;
         }
         return true;
-      })
-      .map(markPassthroughStream);
+      });
+    return (await filterMediaFusionStreams(mediaFusionStreams)).map(markPassthroughStream);
   }
 
   return (Array.isArray(rawStreams) ? rawStreams : [])
