@@ -56,6 +56,10 @@ const addonGroups = {
   mediafusion: {
     name: "Umbrella MF",
     providerIds: ["mediafusion"]
+  },
+  aiostreams: {
+    name: "Umbrella AIO",
+    providerIds: ["aiostreams"]
   }
 };
 const addonGroupEntries = Object.fromEntries(
@@ -72,13 +76,15 @@ const addonManifests = Object.fromEntries(
       name: group.name,
       description: slug === "mediafusion"
         ? `${group.name} provider group for Doom-addon. Passes MediaFusion streams through with Hindi/English detection, blocked source-tag filtering, cached/playable placeholder rejection, and Hindi-first quality/size sorting.`
-        : `${group.name} provider group for Doom-addon. Uses the same Umbrella formatting, filtering, sorting, and playable checks as the main add-on.`
+        : slug === "aiostreams"
+          ? `${group.name} provider group for Doom-addon. Passes AIOStreams streams through with only Hindi/English detection and quality/size sorting.`
+          : `${group.name} provider group for Doom-addon. Uses the same Umbrella formatting, filtering, sorting, and playable checks as the main add-on.`
     })
   ])
 );
 const streamCache = new Map();
 const streamInflight = new Map();
-const passthroughProviderIds = new Set(["mediafusion"]);
+const passthroughProviderIds = new Set(["mediafusion", "aiostreams"]);
 const passthroughStreams = new WeakSet();
 
 function loadProvider(provider) {
@@ -127,6 +133,12 @@ function hasBlockedMediaFusionTag(stream) {
 function hasAllowedMediaFusionLanguage(stream) {
   const text = mediaFusionStreamText(stream);
   return /\b(?:hindi|hin|english|eng)\b/i.test(text);
+}
+
+function hasAllowedPassthroughLanguage(stream) {
+  const text = mediaFusionStreamText(stream);
+  return /\b(?:hindi|hin|english|eng)\b/i.test(text)
+    || /🇮🇳|🇬🇧|🇺🇸/.test(text);
 }
 
 function reportedResponseSize(response) {
@@ -1261,20 +1273,33 @@ async function collectProviderStreams(provider, parsed, tmdbId, mediaInfo) {
   );
 
   if (isPassthroughProvider(provider)) {
-    const mediaFusionStreams = (Array.isArray(rawStreams) ? rawStreams : [])
-      .filter((stream) => stream && stream.url)
+    const passthroughStreamsForProvider = (Array.isArray(rawStreams) ? rawStreams : [])
+      .filter((stream) => stream && stream.url);
+
+    if (provider.id === "mediafusion") {
+      const mediaFusionStreams = passthroughStreamsForProvider.filter((stream) => {
+          if (hasBlockedMediaFusionTag(stream)) {
+            console.log(`[MediaFusion] Rejected blocked source tag: ${stream.name || stream.title || stream.url}`);
+            return false;
+          }
+          if (!hasAllowedMediaFusionLanguage(stream)) {
+            console.log(`[MediaFusion] Rejected non Hindi/English stream: ${stream.name || stream.title || stream.url}`);
+            return false;
+          }
+          return true;
+        });
+      return (await filterMediaFusionStreams(mediaFusionStreams)).map(markPassthroughStream);
+    }
+
+    return passthroughStreamsForProvider
       .filter((stream) => {
-        if (hasBlockedMediaFusionTag(stream)) {
-          console.log(`[MediaFusion] Rejected blocked source tag: ${stream.name || stream.title || stream.url}`);
-          return false;
+        if (hasAllowedPassthroughLanguage(stream)) {
+          return true;
         }
-        if (!hasAllowedMediaFusionLanguage(stream)) {
-          console.log(`[MediaFusion] Rejected non Hindi/English stream: ${stream.name || stream.title || stream.url}`);
-          return false;
-        }
-        return true;
-      });
-    return (await filterMediaFusionStreams(mediaFusionStreams)).map(markPassthroughStream);
+        console.log(`[${provider.name}] Rejected non Hindi/English stream: ${stream.name || stream.title || stream.url}`);
+        return false;
+      })
+      .map(markPassthroughStream);
   }
 
   return (Array.isArray(rawStreams) ? rawStreams : [])

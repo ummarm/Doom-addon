@@ -10,6 +10,8 @@ upstream sources directly:
 - `HDHub4u Murph`
 - `Flix-Streams Emby`
 - `Flix-Streams MkvCinemas`
+- `MediaFusion`
+- `AIOStreams`
 - `HindMoviez`
 - `MovieBlast`
 - `4KHDHub Murph`
@@ -35,6 +37,8 @@ every enabled provider, merges the results, and returns Stremio stream objects.
 - `providers/flix_streams_emby.js`
 - `providers/flix_streams_mkvcinemas.js`
 - `providers/flix_streams_vegamovies.js`
+- `providers/mediafusion.js`
+- `providers/aiostreams.js`
 - `providers/hindmoviez.js`
 - `providers/movieblast.js`
 - `providers/4khdhub_murph.js`
@@ -64,6 +68,8 @@ http://localhost:7000/addons/murph/manifest.json        # Umbrella M
 http://localhost:7000/addons/yoruix/manifest.json       # Umbrella Y
 http://localhost:7000/addons/d3adlyrocket/manifest.json # Umbrella D
 http://localhost:7000/addons/flixnest/manifest.json     # Umbrella F
+http://localhost:7000/addons/mediafusion/manifest.json  # Umbrella MF
+http://localhost:7000/addons/aiostreams/manifest.json   # Umbrella AIO
 ```
 
 You can change the port with:
@@ -110,6 +116,18 @@ are lightly probed to remove blocked playback URLs and tiny placeholder files
 that indicate a cache miss or "still downloading" response. MediaFusion streams
 that cannot be verified in time are not returned. Results are ordered with
 Hindi-language streams first, then quality and size sorting.
+
+AIOStreams uses the configured AIOStreams manifest URL. The checked-in default
+can be overridden if the configured add-on URL changes:
+
+```sh
+AIOSTREAMS_MANIFEST_URL=https://aiostreams.elfhosted.com/stremio/<your-id>/<config>/manifest.json npm start
+```
+
+AIOStreams streams are passed through without Umbrella card formatting,
+playable probes, blocked-tag filtering, or de-duplication. The only AIOStreams
+filter is Hindi/English detection, including common English/Hindi flags. Results
+use the same Hindi-first quality and size sorting.
 
 ## Deploy
 
