@@ -1405,6 +1405,7 @@ async function withTimeout(promise, ms, label) {
 function enrichTrustedProviderStream(rawStream, provider, mediaInfo) {
   const trustedTitleProviders = new Set([
     "moviebox",
+    "moviebox_yoruix",
     "movies4u_murph",
     "netmirror",
     "flix_streams_lotusvault",
