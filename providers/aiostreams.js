@@ -18,36 +18,7 @@ function streamId(baseId, mediaType, season, episode) {
   return baseId;
 }
 
-function headerValue(headers, name) {
-  if (!headers || typeof headers !== "object") {
-    return "";
-  }
-  return headers[name] || headers[name.toLowerCase()] || "";
-}
-
-function aioRequestHeaders(requestContext = {}) {
-  const clientHeaders = requestContext.requestHeaders || {};
-  const headers = {
-    "Accept": "application/json",
-    "User-Agent": headerValue(clientHeaders, "user-agent") || "Doom-addon/1.0"
-  };
-
-  for (const [source, target] of [
-    ["accept-language", "Accept-Language"],
-    ["cf-connecting-ip", "CF-Connecting-IP"],
-    ["x-forwarded-for", "X-Forwarded-For"],
-    ["x-real-ip", "X-Real-IP"]
-  ]) {
-    const value = headerValue(clientHeaders, source);
-    if (value) {
-      headers[target] = value;
-    }
-  }
-
-  return headers;
-}
-
-async function fetchAioStreams(stremioId, mediaType, season, episode, requestContext = {}) {
+async function fetchAioStreams(stremioId, mediaType, season, episode) {
   const baseUrl = configuredBaseUrl();
   if (!baseUrl) {
     return [];
@@ -57,7 +28,10 @@ async function fetchAioStreams(stremioId, mediaType, season, episode, requestCon
   const id = streamId(stremioId, stremioType, season, episode);
   const url = `${baseUrl}/stream/${encodeURIComponent(stremioType)}/${encodeURIComponent(id)}.json`;
   const response = await fetch(url, {
-    headers: aioRequestHeaders(requestContext),
+    headers: {
+      "Accept": "application/json",
+      "User-Agent": "Doom-addon/1.0"
+    },
     redirect: "follow"
   });
   if (!response.ok) {
@@ -68,7 +42,7 @@ async function fetchAioStreams(stremioId, mediaType, season, episode, requestCon
   return Array.isArray(payload.streams) ? payload.streams : [];
 }
 
-async function getStreams(tmdbId, mediaType = "movie", season = null, episode = null, imdbId = "", requestContext = {}) {
+async function getStreams(tmdbId, mediaType = "movie", season = null, episode = null, imdbId = "") {
   const ids = [
     imdbId,
     tmdbId ? `tmdb:${tmdbId}` : ""
@@ -76,7 +50,7 @@ async function getStreams(tmdbId, mediaType = "movie", season = null, episode = 
 
   for (const id of ids) {
     try {
-      const streams = await fetchAioStreams(id, mediaType, season, episode, requestContext);
+      const streams = await fetchAioStreams(id, mediaType, season, episode);
       if (streams.length > 0) {
         return streams.filter((stream) => stream && stream.url);
       }
