@@ -32,7 +32,14 @@ const addonGroups = {
   },
   yoruix: {
     name: "Umbrella Y",
-    providerIds: ["4khdhub_yoruix", "hdhub4u_yoruix", "moviebox_yoruix"]
+    providerIds: [
+      "4khdhub_yoruix",
+      "hdhub4u_yoruix",
+      "moviebox_yoruix",
+      "netmirror_yoruix",
+      "uhdmovies_yoruix",
+      "movieblast_yoruix"
+    ]
   },
   d3adlyrocket: {
     name: "Umbrella D",
@@ -42,11 +49,15 @@ const addonGroups = {
       "hdhub4u",
       "hindmoviez",
       "movieblast",
+      "movieboxhindi",
       "moviebox",
+      "movies4u",
       "moviesdrive",
       "netmirror",
       "peachify",
-      "streamflix"
+      "streamflix",
+      "uhdmovies",
+      "4khdhubnew"
     ]
   },
   flixnest: {
@@ -712,6 +723,7 @@ async function filterPlayableStreams(streams, options = {}) {
 
 const UMBRELLA_PROVIDER_CODES = {
   "4khdhub": "4KHH DR",
+  "4khdhubnew": "4KHHN DR",
   "4khdhubtv": "4KHH DR",
   "4khdhub_yoruix": "4KHH Y",
   "4khdhub_murph": "4KHH M",
@@ -727,14 +739,20 @@ const UMBRELLA_PROVIDER_CODES = {
   "mediafusion": "MF",
   "hindmoviez": "HM",
   "movieblast": "MBL",
+  "movieblast_yoruix": "MBL Y",
   "moviebox": "MB",
+  "movieboxhindi": "MBH DR",
   "moviebox_yoruix": "MB Y",
   "moviebox_murph": "MB M",
   "moviesdrive": "MD",
+  "movies4u": "M4U DR",
   "movies4u_murph": "M4U M",
   "netmirror": "NM",
+  "netmirror_yoruix": "NM Y",
   "peachify": "PF",
-  "streamflix": "SF"
+  "streamflix": "SF",
+  "uhdmovies": "UHD DR",
+  "uhdmovies_yoruix": "UHD Y"
 };
 const DETAIL_PROVIDER_CODES = Object.assign({}, UMBRELLA_PROVIDER_CODES, {
   "flix_streams_mkvcinemas": "MKV Direct"
@@ -742,6 +760,7 @@ const DETAIL_PROVIDER_CODES = Object.assign({}, UMBRELLA_PROVIDER_CODES, {
 const KNOWN_AUDIO_LABELS = ["Hindi", "Tamil", "Telugu", "English", "Malayalam", "Kannada", "Punjabi"];
 const SOURCE_DETAIL_NAMES = {
   "4khdhub": "Darth Vader",
+  "4khdhubnew": "Darth Vader",
   "4khdhubtv": "Darth Vader",
   "4khdhub_yoruix": "Darth Vader",
   "4khdhub_murph": "Murph Streams",
@@ -757,14 +776,20 @@ const SOURCE_DETAIL_NAMES = {
   "mediafusion": "Darth Vader",
   "hindmoviez": "Darth Vader",
   "movieblast": "Darth Vader",
+  "movieblast_yoruix": "Darth Vader",
   "moviebox": "Darth Vader",
+  "movieboxhindi": "Darth Vader",
   "moviebox_yoruix": "Darth Vader",
   "moviebox_murph": "Murph Streams",
   "moviesdrive": "Darth Vader",
+  "movies4u": "Darth Vader",
   "movies4u_murph": "Murph Streams",
   "netmirror": "Darth Vader",
+  "netmirror_yoruix": "Darth Vader",
   "peachify": "Darth Vader",
-  "streamflix": "Darth Vader"
+  "streamflix": "Darth Vader",
+  "uhdmovies": "Darth Vader",
+  "uhdmovies_yoruix": "Darth Vader"
 };
 
 function parseSizeToBytes(value) {
@@ -1303,7 +1328,7 @@ function shouldKeepProviderStream(rawStream, provider) {
     rawStream.language
   ].filter(Boolean).join(" ");
 
-  if (provider.id === "moviebox_yoruix") {
+  if (provider.id === "moviebox_yoruix" || provider.id === "movieboxhindi") {
     return /\b(?:hindi|english|original)\b/i.test(text);
   }
 
@@ -1311,7 +1336,7 @@ function shouldKeepProviderStream(rawStream, provider) {
     return /\b(?:hindi|english)\b/i.test(text);
   }
 
-  if (provider.id !== "movieblast") {
+  if (provider.id !== "movieblast" && provider.id !== "movieblast_yoruix") {
     return true;
   }
 
@@ -1405,12 +1430,17 @@ async function withTimeout(promise, ms, label) {
 function enrichTrustedProviderStream(rawStream, provider, mediaInfo) {
   const trustedTitleProviders = new Set([
     "moviebox",
+    "movieboxhindi",
     "moviebox_yoruix",
+    "movies4u",
     "movies4u_murph",
     "netmirror",
+    "netmirror_yoruix",
     "flix_streams_lotusvault",
     "flix_streams_archivevault",
-    "flix_streams_uhdmovies"
+    "flix_streams_uhdmovies",
+    "uhdmovies",
+    "uhdmovies_yoruix"
   ]);
   if (!rawStream || !trustedTitleProviders.has(provider.id) || !mediaInfo || !mediaInfo.title) {
     return rawStream;

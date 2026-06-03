@@ -328,11 +328,18 @@ PROVIDERS = (
     Provider("hindmoviez", ("providers/hindmoviez.js",), "providers/hindmoviez.js", ("hindmoviez",)),
     Provider("movieblast", ("providers/movieblast.js",), "providers/movieblast.js", ("movieblast",)),
     Provider("moviebox", ("providers/moviebox.js",), "providers/moviebox.js", ("moviebox",)),
+    Provider("movieboxhindi", ("providers/movieboxhindi.js",), "providers/movieboxhindi.js", ("movieboxhindi", "moviebox")),
+    Provider("movies4u", ("providers/movies4u.js",), "providers/movies4u.js", ("movies4u",)),
     Provider("netmirror", ("providers/netmirror.js",), "providers/netmirror.js", ("netmirror",)),
     Provider("peachify", ("providers/peachify.js",), "providers/peachify.js", ("peachify",)),
+    Provider("uhdmovies", ("providers/uhdmovies.js",), "providers/uhdmovies.js", ("uhdmovies",)),
+    Provider("4khdhubnew", ("providers/4khdhubnew.js",), "providers/4khdhubnew.js", ("4khdhubnew", "4khdhub", "hubcloud")),
     Provider("4khdhub_yoruix", ("providers/4khdhub.js",), "providers/4khdhub_yoruix.js", ("4khdhub", "hubcloud", "yoruix"), YORUIX_UPSTREAM_RAW_BASE, YORUIX_UPSTREAM_TREE_API),
     Provider("hdhub4u_yoruix", ("providers/hdhub4u.js", "src/hdhub4u/index.js"), "providers/hdhub4u_yoruix.js", ("hdhub4u", "yoruix"), YORUIX_UPSTREAM_RAW_BASE, YORUIX_UPSTREAM_TREE_API),
     Provider("moviebox_yoruix", ("providers/moviebox.js",), "providers/moviebox_yoruix.js", ("moviebox", "yoruix"), YORUIX_UPSTREAM_RAW_BASE, YORUIX_UPSTREAM_TREE_API),
+    Provider("netmirror_yoruix", ("providers/netmirror.js",), "providers/netmirror_yoruix.js", ("netmirror", "yoruix"), YORUIX_UPSTREAM_RAW_BASE, YORUIX_UPSTREAM_TREE_API),
+    Provider("uhdmovies_yoruix", ("providers/uhdmovies.js",), "providers/uhdmovies_yoruix.js", ("uhdmovies", "yoruix"), YORUIX_UPSTREAM_RAW_BASE, YORUIX_UPSTREAM_TREE_API),
+    Provider("movieblast_yoruix", ("providers/movieblast.js",), "providers/movieblast_yoruix.js", ("movieblast", "yoruix"), YORUIX_UPSTREAM_RAW_BASE, YORUIX_UPSTREAM_TREE_API),
     Provider("moviesdrive", ("src/providers/moviesdrive.js", "providers/moviesdrive.js"), "providers/moviesdrive.js", ("moviesdrive",)),
     Provider("streamflix", ("providers/streamflix.js",), "providers/streamflix.js", ("streamflix",)),
 )
@@ -539,11 +546,11 @@ def patch_moviebox_crypto_source(text: str) -> str:
 
 
 def transform_source(provider: Provider, text: str) -> str:
-    if provider.scraper_id in {"4khdhub", "4khdhubtv", "hdhub4u", "4khdhub_yoruix", "hdhub4u_yoruix"} and "DOMAINS_URL" in text:
+    if provider.scraper_id in {"4khdhub", "4khdhubtv", "4khdhubnew", "hdhub4u", "4khdhub_yoruix", "hdhub4u_yoruix"} and "DOMAINS_URL" in text:
         text = patch_domain_source(text)
     elif provider.scraper_id == "moviesdrive":
         text = patch_moviesdrive_domain_source(text)
-    if provider.scraper_id in {"moviebox", "moviebox_yoruix"}:
+    if provider.scraper_id in {"moviebox", "movieboxhindi", "moviebox_yoruix"}:
         text = patch_moviebox_crypto_source(text)
     if provider.scraper_id == "hdhub4u_yoruix":
         text = patch_yoruix_hdhub4u_source(text)

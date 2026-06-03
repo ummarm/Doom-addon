@@ -1,6 +1,6 @@
 {
   "name": "Doom-addon",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "scrapers": [
     {
       "id": "4khdhub",
@@ -197,6 +197,74 @@
       "logo": "https://i.postimg.cc/qqw7ZW0J/moviebox.png",
       "contentLanguage": [
         "en",
+        "hi"
+      ]
+    },
+    {
+      "id": "netmirror_yoruix",
+      "name": "NetMirror Yoruix",
+      "description": "Alternate NetMirror implementation synced from yoruix/nuvio-providers",
+      "version": "1.0.3",
+      "author": "ummarm",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/netmirror_yoruix.js",
+      "enabled": true,
+      "formats": [
+        "mp4",
+        "mkv",
+        "m3u8"
+      ],
+      "logo": "https://i.postimg.cc/9QZLkH7f/umbrella.png",
+      "contentLanguage": [
+        "en",
+        "hi"
+      ]
+    },
+    {
+      "id": "uhdmovies_yoruix",
+      "name": "UHDMovies Yoruix",
+      "description": "Alternate UHDMovies implementation synced from yoruix/nuvio-providers",
+      "version": "1.2.1",
+      "author": "ummarm",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/uhdmovies_yoruix.js",
+      "enabled": true,
+      "formats": [
+        "mp4",
+        "mkv",
+        "m3u8"
+      ],
+      "logo": "https://i.postimg.cc/9QZLkH7f/umbrella.png",
+      "contentLanguage": [
+        "en",
+        "hi"
+      ]
+    },
+    {
+      "id": "movieblast_yoruix",
+      "name": "MovieBlast Yoruix",
+      "description": "Alternate MovieBlast implementation synced from yoruix/nuvio-providers, filtered to Hindi streams",
+      "version": "1.0.1",
+      "author": "ummarm",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/movieblast_yoruix.js",
+      "enabled": true,
+      "formats": [
+        "mp4",
+        "mkv",
+        "m3u8"
+      ],
+      "logo": "https://i.postimg.cc/qqkLSyhN/movieblast.png",
+      "contentLanguage": [
         "hi"
       ]
     },
@@ -473,6 +541,97 @@
         "m3u8"
       ],
       "logo": "https://i.postimg.cc/qqw7ZW0J/moviebox.png",
+      "contentLanguage": [
+        "en",
+        "hi"
+      ]
+    },
+    {
+      "id": "4khdhubnew",
+      "name": "4KHDHub-NEW",
+      "description": "4KHDHub-NEW streams synced from D3adlyRocket/All-in-One-Nuvio",
+      "version": "2.0.1",
+      "author": "ummarm",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/4khdhubnew.js",
+      "enabled": true,
+      "formats": [
+        "mp4",
+        "mkv",
+        "m3u8"
+      ],
+      "logo": "https://i.postimg.cc/DZpW6Xfb/4khdhub.png",
+      "contentLanguage": [
+        "en",
+        "hi"
+      ]
+    },
+    {
+      "id": "movieboxhindi",
+      "name": "MovieBox-Hindi",
+      "description": "MovieBox-Hindi streams synced from D3adlyRocket/All-in-One-Nuvio",
+      "version": "1.0.1",
+      "author": "ummarm",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/movieboxhindi.js",
+      "enabled": true,
+      "formats": [
+        "mp4",
+        "mkv",
+        "m3u8"
+      ],
+      "logo": "https://i.postimg.cc/qqw7ZW0J/moviebox.png",
+      "contentLanguage": [
+        "hi"
+      ]
+    },
+    {
+      "id": "movies4u",
+      "name": "Movies4u",
+      "description": "Movies4u streams synced from D3adlyRocket/All-in-One-Nuvio",
+      "version": "1.0.2",
+      "author": "ummarm",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/movies4u.js",
+      "enabled": true,
+      "formats": [
+        "mp4",
+        "mkv",
+        "m3u8"
+      ],
+      "logo": "https://i.postimg.cc/9QZLkH7f/umbrella.png",
+      "contentLanguage": [
+        "en",
+        "hi"
+      ]
+    },
+    {
+      "id": "uhdmovies",
+      "name": "UHDMovies",
+      "description": "UHDMovies streams synced from D3adlyRocket/All-in-One-Nuvio",
+      "version": "1.0.1",
+      "author": "ummarm",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/uhdmovies.js",
+      "enabled": true,
+      "formats": [
+        "mp4",
+        "mkv",
+        "m3u8"
+      ],
+      "logo": "https://i.postimg.cc/9QZLkH7f/umbrella.png",
       "contentLanguage": [
         "en",
         "hi"
