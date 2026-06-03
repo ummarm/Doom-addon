@@ -1,6 +1,6 @@
 {
   "name": "Doom-addon",
-  "version": "2.0.8",
+  "version": "2.0.9",
   "scrapers": [
     {
       "id": "4khdhub",
@@ -440,7 +440,7 @@
         "tv"
       ],
       "filename": "providers/aiostreams.js",
-      "enabled": true,
+      "enabled": false,
       "formats": [
         "mp4",
         "mkv",
