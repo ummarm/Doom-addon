@@ -24,17 +24,33 @@ PROVIDER_REGISTRY_PATH = REPO_ROOT / "providers.json"
 STREMIO_MANIFEST_PATH = REPO_ROOT / "manifest.json"
 PACKAGE_PATH = REPO_ROOT / "package.json"
 PROVIDERS_DIR = REPO_ROOT / "providers"
+UPSTREAMS_PATH = REPO_ROOT / "upstreams.json"
 ANCHOR_DATE = date(2026, 4, 20)
 CADENCE_DAYS = 1
 D3ADLYROCKET_UPSTREAM_RAW_BASE = "https://raw.githubusercontent.com/D3adlyRocket/All-in-One-Nuvio/main"
 D3ADLYROCKET_UPSTREAM_TREE_API = "https://api.github.com/repos/D3adlyRocket/All-in-One-Nuvio/git/trees/main?recursive=1"
+D3ADLYROCKET_MANIFEST_URL = "https://raw.githubusercontent.com/D3adlyRocket/All-in-One-Nuvio/refs/heads/main/manifest.json"
 YORUIX_UPSTREAM_RAW_BASE = "https://raw.githubusercontent.com/yoruix/nuvio-providers/main"
 YORUIX_UPSTREAM_TREE_API = "https://api.github.com/repos/yoruix/nuvio-providers/git/trees/main?recursive=1"
 YORUIX_MANIFEST_URL = "https://raw.githubusercontent.com/yoruix/nuvio-providers/refs/heads/main/manifest.json"
+FLIX_STREAMS_MANIFEST_URL = "https://flixnest.app/flix-streams/u/6p9xzp78nunz/manifest.json"
 MURPH_MANIFEST_URL = "https://badboysxs-morpheus.hf.space/manifest.json"
 ADDON_DOMAINS_URL = "https://raw.githubusercontent.com/ummarm/Doom-addon/main/domains.json"
 UPSTREAM_DOMAINS_URL = "https://raw.githubusercontent.com/phisher98/TVVVV/refs/heads/main/domains.json"
 USER_AGENT = "Doom-addon direct upstream sync"
+DEFAULT_UPSTREAMS = {
+    "syncCadenceDays": CADENCE_DAYS,
+    "manifests": {
+        "d3adlyrocket": D3ADLYROCKET_MANIFEST_URL,
+        "yoruix": YORUIX_MANIFEST_URL,
+        "flixnest": FLIX_STREAMS_MANIFEST_URL,
+        "murph": MURPH_MANIFEST_URL,
+    },
+    "domainSources": {
+        "doomAddon": ADDON_DOMAINS_URL,
+        "upstream": UPSTREAM_DOMAINS_URL,
+    },
+}
 SEEKABLE_VALIDATION_MARKER = "__DOOM_SEEKABLE_VALIDATION__"
 HDHUB_TV_EPISODE_FALLBACK_MARKER = "__DOOM_HDHUB_TV_EPISODE_FALLBACK__"
 NETMIRROR_DURATION_FILTER_MARKER = "__DOOM_NETMIRROR_DURATION_FILTER__"
@@ -288,33 +304,57 @@ function __doomPickHdhubSearchResult(mediaInfo, results, mediaType, season) {
 
 function __doomExtractHdhubEpisodeLinksFromPage(html, pageUrl, wantedEpisode) {
   var sections = [];
-  var blockRe = /<h[1-6][^>]*>[\s\S]*?<\/h[1-6]>/gi;
-  var blockMatch;
-  var currentEpisode = null;
+  var headingRe = /<h[1-6][^>]*>[\s\S]*?<\/h[1-6]>/gi;
+  var headingMatch;
+  var episodeHeading = null;
 
-  while ((blockMatch = blockRe.exec(html)) !== null) {
-    var blockHtml = blockMatch[0];
-    var text = __doomPlainText(blockHtml);
-    var epMatch = text.match(/(?:episode|epi?sode)\s*(\d+)|\bE(?:P)?\s*0*(\d+)\b/i);
-    if (epMatch) {
-      currentEpisode = Number(epMatch[1] || epMatch[2]);
-      continue;
+  while ((headingMatch = headingRe.exec(html)) !== null) {
+    var headingText = __doomPlainText(headingMatch[0]);
+    var epMatch = headingText.match(/(?:episode|epi?sode)\s*0*(\d+)|\bE(?:P)?\s*0*(\d+)\b/i);
+    if (epMatch && Number(epMatch[1] || epMatch[2]) === Number(wantedEpisode)) {
+      episodeHeading = {
+        start: headingMatch.index,
+        end: headingRe.lastIndex
+      };
+      break;
     }
+  }
 
-    if (currentEpisode !== Number(wantedEpisode)) continue;
-    if (!/(?:480|720|1080|2160|4K)/i.test(text)) continue;
+  if (!episodeHeading) return sections;
 
-    var quality = __doomQualityFromText(text);
-    var anchors = [];
-    var anchorRe = /<a\b[^>]*href=["']([^"']+)["'][^>]*>/gi;
-    var anchorMatch;
-    while ((anchorMatch = anchorRe.exec(blockHtml)) !== null) {
-      var href = __doomResolveHdhubUrl(anchorMatch[1], pageUrl);
-      if (href && anchors.indexOf(href) === -1) anchors.push(href);
-    }
+  var nextEpisodeRe = /<h[1-6][^>]*>[\s\S]*?(?:episode|epi?sode)\s*\d+[\s\S]*?<\/h[1-6]>/gi;
+  nextEpisodeRe.lastIndex = episodeHeading.end;
+  var nextEpisodeMatch = nextEpisodeRe.exec(html);
+  var segmentEnd = nextEpisodeMatch ? nextEpisodeMatch.index : html.length;
+  var segment = html.slice(episodeHeading.end, segmentEnd);
+  var anchorRe = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  var anchorMatch;
+  var seen = Object.create(null);
 
-    anchors.forEach(function(href) {
-      sections.push({ href: href, quality: quality, label: text });
+  function looksLikeDownloadHref(href, text) {
+    var value = String(href || "").toLowerCase();
+    var label = String(text || "").toLowerCase();
+    if (!value || value.indexOf("#") === 0 || value.indexOf("javascript:") === 0) return false;
+    if (/hubcloud|hubdrive|hubcdn|hubstream|hblinks|hdstream4u|vidstack|pixeldrain|streamtape|techyboy|gadgetsweb|cryptoinsights|bloggingvector|ampproject|homelander|workers\.dev/.test(value)) return true;
+    if (/\.(mkv|mp4|m3u8)(?:[?#]|$)/i.test(value)) return true;
+    if (/(drive|instant|watch|download|hubcloud|hubdrive)/i.test(label)) return true;
+    return false;
+  }
+
+  while ((anchorMatch = anchorRe.exec(segment)) !== null) {
+    var rawHref = anchorMatch[1];
+    var anchorText = __doomPlainText(anchorMatch[2]);
+    var contextStart = Math.max(0, anchorMatch.index - 800);
+    var contextEnd = Math.min(segment.length, anchorRe.lastIndex + 800);
+    var context = __doomPlainText(segment.slice(contextStart, contextEnd));
+    var href = __doomResolveHdhubUrl(rawHref, pageUrl);
+    if (!looksLikeDownloadHref(href, anchorText)) continue;
+    if (seen[href]) continue;
+    seen[href] = true;
+    sections.push({
+      href: href,
+      quality: __doomQualityFromText(context),
+      label: context || anchorText
     });
   }
 
@@ -769,6 +809,44 @@ def fetch_upstream_manifest_paths(manifest_url: str) -> list[str]:
     return paths
 
 
+def load_upstreams() -> dict:
+    upstreams = json.loads(json.dumps(DEFAULT_UPSTREAMS))
+    if not UPSTREAMS_PATH.exists():
+        return upstreams
+
+    try:
+        configured = json.loads(UPSTREAMS_PATH.read_text(encoding="utf-8"))
+    except Exception as exc:
+        print(f"Warning: upstream config could not be read, using defaults: {exc}")
+        return upstreams
+
+    if not isinstance(configured, dict):
+        print("Warning: upstream config was not an object, using defaults.")
+        return upstreams
+
+    for section in ("manifests", "domainSources"):
+        current = upstreams.setdefault(section, {})
+        incoming = configured.get(section)
+        if isinstance(incoming, dict):
+            for key, value in incoming.items():
+                if isinstance(value, str) and value:
+                    current[key] = value
+
+    cadence = configured.get("syncCadenceDays")
+    if isinstance(cadence, int) and cadence > 0:
+        upstreams["syncCadenceDays"] = cadence
+    return upstreams
+
+
+def manifest_url_for_provider(provider: Provider, upstreams: dict) -> str:
+    manifests = upstreams.get("manifests", {}) if isinstance(upstreams, dict) else {}
+    if provider.upstream_raw_base == YORUIX_UPSTREAM_RAW_BASE:
+        return manifests.get("yoruix", YORUIX_MANIFEST_URL)
+    if provider.upstream_raw_base == D3ADLYROCKET_UPSTREAM_RAW_BASE:
+        return manifests.get("d3adlyrocket", D3ADLYROCKET_MANIFEST_URL)
+    return ""
+
+
 def normalize_token(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", value.lower())
 
@@ -1062,10 +1140,31 @@ def update_package(registry: dict) -> bool:
     return write_json_if_changed(PACKAGE_PATH, package_json)
 
 
-def check_murph_manifest() -> list[str]:
+def check_manifest_available(label: str, manifest_url: str) -> list[str]:
+    try:
+        manifest = fetch_json(manifest_url)
+    except Exception as exc:
+        return [f"{label} manifest check failed: {exc}"]
+
+    if not isinstance(manifest, dict):
+        return [f"{label} manifest check failed: payload was not an object."]
+
+    resources = manifest.get("resources", [])
+    has_stream = "stream" in resources
+    if isinstance(resources, list):
+        has_stream = has_stream or any(
+            isinstance(resource, dict) and resource.get("name") == "stream"
+            for resource in resources
+        )
+    if not has_stream:
+        return [f"{label} manifest did not expose a stream resource during this check."]
+    return []
+
+
+def check_murph_manifest(manifest_url: str) -> list[str]:
     warnings: list[str] = []
     try:
-        manifest = fetch_json(MURPH_MANIFEST_URL)
+        manifest = fetch_json(manifest_url)
     except Exception as exc:
         return [f"Murph manifest check failed: {exc}"]
 
@@ -1076,26 +1175,29 @@ def check_murph_manifest() -> list[str]:
     return warnings
 
 
-def is_due_to_run(today_utc: date, force: bool) -> bool:
+def is_due_to_run(today_utc: date, force: bool, cadence_days: int = CADENCE_DAYS) -> bool:
     if force:
         return True
     delta_days = (today_utc - ANCHOR_DATE).days
-    return delta_days >= 0 and delta_days % CADENCE_DAYS == 0
+    return delta_days >= 0 and delta_days % cadence_days == 0
 
 
 def main() -> int:
     force = os.environ.get("FORCE_SYNC", "false").lower() == "true"
     today_utc = datetime.now(timezone.utc).date()
+    upstreams = load_upstreams()
+    cadence_days = int(upstreams.get("syncCadenceDays") or CADENCE_DAYS)
+    manifests = upstreams.get("manifests", {}) if isinstance(upstreams, dict) else {}
 
-    if not is_due_to_run(today_utc, force):
+    if not is_due_to_run(today_utc, force, cadence_days):
         write_output("changed", "false")
         write_output("skipped", "true")
         write_summary([
             "## Doom-addon direct upstream sync",
             "",
-            f"Skipped on `{today_utc.isoformat()}` UTC because the 2-day cadence is anchored to `{ANCHOR_DATE.isoformat()}`.",
+            f"Skipped on `{today_utc.isoformat()}` UTC because the {cadence_days}-day cadence is anchored to `{ANCHOR_DATE.isoformat()}`.",
         ])
-        print("Not on the 2-day sync cadence; skipping.")
+        print(f"Not on the {cadence_days}-day sync cadence; skipping.")
         return 0
 
     changed_providers: list[ResolvedProvider] = []
@@ -1110,20 +1212,34 @@ def main() -> int:
             print(f"Info: `{provider.scraper_id}` upstream sync is paused.")
             continue
 
-        if provider.upstream_raw_base == YORUIX_UPSTREAM_RAW_BASE:
+        manifest_url = manifest_url_for_provider(provider, upstreams)
+        if manifest_url:
             try:
-                upstream_tree_paths = upstream_manifest_cache.get(YORUIX_MANIFEST_URL)
+                upstream_tree_paths = upstream_manifest_cache.get(manifest_url)
                 if upstream_tree_paths is None:
-                    upstream_tree_paths = fetch_upstream_manifest_paths(YORUIX_MANIFEST_URL)
-                    upstream_manifest_cache[YORUIX_MANIFEST_URL] = upstream_tree_paths
+                    upstream_tree_paths = fetch_upstream_manifest_paths(manifest_url)
+                    upstream_manifest_cache[manifest_url] = upstream_tree_paths
             except Exception as exc:
                 upstream_tree_paths = []
                 warning = (
-                    f"Yoruix manifest discovery failed for `{provider.scraper_id}`, so Doom-addon "
+                    f"Manifest discovery failed for `{provider.scraper_id}` from `{manifest_url}`, so Doom-addon "
                     f"fell back to static paths: {exc}"
                 )
                 sync_warnings.append(warning)
                 print(f"Warning: {warning}")
+                try:
+                    upstream_tree_paths = upstream_tree_cache.get(provider.upstream_tree_api)
+                    if upstream_tree_paths is None:
+                        upstream_tree_paths = fetch_upstream_tree_paths(provider.upstream_tree_api)
+                        upstream_tree_cache[provider.upstream_tree_api] = upstream_tree_paths
+                except Exception as tree_exc:
+                    upstream_tree_paths = []
+                    tree_warning = (
+                        f"Upstream tree fallback also failed for `{provider.scraper_id}`, so Doom-addon "
+                        f"fell back to static paths: {tree_exc}"
+                    )
+                    sync_warnings.append(tree_warning)
+                    print(f"Warning: {tree_warning}")
         else:
             try:
                 upstream_tree_paths = upstream_tree_cache.get(provider.upstream_tree_api)
@@ -1174,7 +1290,10 @@ def main() -> int:
             provider.local_path.write_text(transformed_text, encoding="utf-8")
             changed_providers.append(resolved_provider)
 
-    sync_warnings.extend(check_murph_manifest())
+    flixnest_manifest_url = manifests.get("flixnest", FLIX_STREAMS_MANIFEST_URL)
+    murph_manifest_url = manifests.get("murph", MURPH_MANIFEST_URL)
+    sync_warnings.extend(check_manifest_available("Flixnest", flixnest_manifest_url))
+    sync_warnings.extend(check_murph_manifest(murph_manifest_url))
 
     changed_ids = {provider.scraper_id for provider in changed_providers} | changed_domain_ids
     registry_changed, version_changes, registry = update_versions(changed_ids)
@@ -1203,10 +1322,11 @@ def main() -> int:
         f"Changed: `{'true' if changed else 'false'}`",
         "",
         "Sources:",
-        f"- `{D3ADLYROCKET_UPSTREAM_RAW_BASE}`",
-        f"- `{YORUIX_MANIFEST_URL}`",
+        f"- `{manifests.get('d3adlyrocket', D3ADLYROCKET_MANIFEST_URL)}`",
+        f"- `{manifests.get('yoruix', YORUIX_MANIFEST_URL)}`",
+        f"- `{flixnest_manifest_url}`",
         f"- `{UPSTREAM_DOMAINS_URL}`",
-        f"- `{MURPH_MANIFEST_URL}`",
+        f"- `{murph_manifest_url}`",
     ]
     if changed_ids:
         summary_lines.extend(["", f"Updated scrapers: `{changed_names}`", "", "Version bumps:"])

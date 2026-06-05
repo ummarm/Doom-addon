@@ -13,6 +13,7 @@ upstream sources directly:
 - `Flix-Streams LotusVault`
 - `Flix-Streams ArchiveVault`
 - `Flix-Streams UHDMovies`
+- `Flix-Streams Other`
 - `MediaFusion`
 - `AIOStreams`
 - `HindMoviez`
@@ -110,7 +111,8 @@ FLIX_STREAMS_MANIFEST_URL=https://flixnest.app/flix-streams/u/<token>/manifest.j
 ```
 
 The Flixnest group currently wraps Emby/Media Lib, MkvCinemas, LotusVault,
-ArchiveVault, and UHDMovies streams from that configured Flix-Streams URL.
+ArchiveVault, UHDMovies, and any newly enabled Flix-Streams results that are
+not already covered by a named wrapper.
 VegaMovies stays registered but disabled because those links were previously
 marked unreliable.
 
@@ -193,8 +195,9 @@ The stream endpoint shape is:
 - `HindMoviez` returns resolved direct URLs instead of relying on the upstream
   Cloudflare worker.
 - `Flix-Streams Emby`, `Flix-Streams MkvCinemas`, `Flix-Streams LotusVault`,
-  `Flix-Streams ArchiveVault`, and `Flix-Streams UHDMovies` wrap the configured
-  Flix-Streams add-on URL and do not sync from the GitHub upstream providers.
+  `Flix-Streams ArchiveVault`, `Flix-Streams UHDMovies`, and
+  `Flix-Streams Other` wrap the configured Flix-Streams add-on URL and do not
+  sync from the GitHub upstream providers.
 - `Flix-Streams VegaMovies` is kept in the repo but currently disabled because
   those Flixnest links are not working reliably.
 - `StreamFlix` is kept in the repo but currently disabled and paused from

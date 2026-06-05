@@ -1,0 +1,13 @@
+{
+  "syncCadenceDays": 1,
+  "manifests": {
+    "d3adlyrocket": "https://raw.githubusercontent.com/D3adlyRocket/All-in-One-Nuvio/refs/heads/main/manifest.json",
+    "yoruix": "https://raw.githubusercontent.com/yoruix/nuvio-providers/refs/heads/main/manifest.json",
+    "flixnest": "https://flixnest.app/flix-streams/u/6p9xzp78nunz/manifest.json",
+    "murph": "https://badboysxs-morpheus.hf.space/manifest.json"
+  },
+  "domainSources": {
+    "doomAddon": "https://raw.githubusercontent.com/ummarm/Doom-addon/main/domains.json",
+    "upstream": "https://raw.githubusercontent.com/phisher98/TVVVV/refs/heads/main/domains.json"
+  }
+}

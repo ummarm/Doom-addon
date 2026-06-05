@@ -865,33 +865,57 @@ function __doomPickHdhubSearchResult(mediaInfo, results, mediaType, season) {
 
 function __doomExtractHdhubEpisodeLinksFromPage(html, pageUrl, wantedEpisode) {
   var sections = [];
-  var blockRe = /<h[1-6][^>]*>[\s\S]*?<\/h[1-6]>/gi;
-  var blockMatch;
-  var currentEpisode = null;
+  var headingRe = /<h[1-6][^>]*>[\s\S]*?<\/h[1-6]>/gi;
+  var headingMatch;
+  var episodeHeading = null;
 
-  while ((blockMatch = blockRe.exec(html)) !== null) {
-    var blockHtml = blockMatch[0];
-    var text = __doomPlainText(blockHtml);
-    var epMatch = text.match(/(?:episode|epi?sode)\s*(\d+)|\bE(?:P)?\s*0*(\d+)\b/i);
-    if (epMatch) {
-      currentEpisode = Number(epMatch[1] || epMatch[2]);
-      continue;
+  while ((headingMatch = headingRe.exec(html)) !== null) {
+    var headingText = __doomPlainText(headingMatch[0]);
+    var epMatch = headingText.match(/(?:episode|epi?sode)\s*0*(\d+)|\bE(?:P)?\s*0*(\d+)\b/i);
+    if (epMatch && Number(epMatch[1] || epMatch[2]) === Number(wantedEpisode)) {
+      episodeHeading = {
+        start: headingMatch.index,
+        end: headingRe.lastIndex
+      };
+      break;
     }
+  }
 
-    if (currentEpisode !== Number(wantedEpisode)) continue;
-    if (!/(?:480|720|1080|2160|4K)/i.test(text)) continue;
+  if (!episodeHeading) return sections;
 
-    var quality = __doomQualityFromText(text);
-    var anchors = [];
-    var anchorRe = /<a\b[^>]*href=["']([^"']+)["'][^>]*>/gi;
-    var anchorMatch;
-    while ((anchorMatch = anchorRe.exec(blockHtml)) !== null) {
-      var href = __doomResolveHdhubUrl(anchorMatch[1], pageUrl);
-      if (href && anchors.indexOf(href) === -1) anchors.push(href);
-    }
+  var nextEpisodeRe = /<h[1-6][^>]*>[\s\S]*?(?:episode|epi?sode)\s*\d+[\s\S]*?<\/h[1-6]>/gi;
+  nextEpisodeRe.lastIndex = episodeHeading.end;
+  var nextEpisodeMatch = nextEpisodeRe.exec(html);
+  var segmentEnd = nextEpisodeMatch ? nextEpisodeMatch.index : html.length;
+  var segment = html.slice(episodeHeading.end, segmentEnd);
+  var anchorRe = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  var anchorMatch;
+  var seen = Object.create(null);
 
-    anchors.forEach(function(href) {
-      sections.push({ href: href, quality: quality, label: text });
+  function looksLikeDownloadHref(href, text) {
+    var value = String(href || "").toLowerCase();
+    var label = String(text || "").toLowerCase();
+    if (!value || value.indexOf("#") === 0 || value.indexOf("javascript:") === 0) return false;
+    if (/hubcloud|hubdrive|hubcdn|hubstream|hblinks|hdstream4u|vidstack|pixeldrain|streamtape|techyboy|gadgetsweb|cryptoinsights|bloggingvector|ampproject|homelander|workers\.dev/.test(value)) return true;
+    if (/\.(mkv|mp4|m3u8)(?:[?#]|$)/i.test(value)) return true;
+    if (/(drive|instant|watch|download|hubcloud|hubdrive)/i.test(label)) return true;
+    return false;
+  }
+
+  while ((anchorMatch = anchorRe.exec(segment)) !== null) {
+    var rawHref = anchorMatch[1];
+    var anchorText = __doomPlainText(anchorMatch[2]);
+    var contextStart = Math.max(0, anchorMatch.index - 800);
+    var contextEnd = Math.min(segment.length, anchorRe.lastIndex + 800);
+    var context = __doomPlainText(segment.slice(contextStart, contextEnd));
+    var href = __doomResolveHdhubUrl(rawHref, pageUrl);
+    if (!looksLikeDownloadHref(href, anchorText)) continue;
+    if (seen[href]) continue;
+    seen[href] = true;
+    sections.push({
+      href: href,
+      quality: __doomQualityFromText(context),
+      label: context || anchorText
     });
   }
 

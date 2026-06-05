@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       force:
-        description: "Run now even if today is outside the 2-day cadence"
+        description: "Run now even if today is outside the configured cadence"
         required: false
         default: true
         type: boolean
@@ -42,7 +42,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A manifest.json package.json providers.json providers
+          git add -A manifest.json package.json providers.json providers domains.json upstreams.json scripts/sync_upstream.py
           if ! git diff --cached --quiet; then
             git commit -m "chore: sync Doom-addon providers from original upstreams"
             git push
