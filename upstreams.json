@@ -4,7 +4,11 @@
     "d3adlyrocket": "https://raw.githubusercontent.com/D3adlyRocket/All-in-One-Nuvio/refs/heads/main/manifest.json",
     "yoruix": "https://raw.githubusercontent.com/yoruix/nuvio-providers/refs/heads/main/manifest.json",
     "flixnest": "https://flixnest.app/flix-streams/u/6p9xzp78nunz/manifest.json",
-    "murph": "https://badboysxs-morpheus.hf.space/manifest.json"
+    "murph": "https://badboysxs-morpheus.hf.space/manifest.json",
+    "webstreamrmbg": "https://87d6a6ef6b58-webstreamrmbg.baby-beamup.club/manifest.json"
+  },
+  "repositories": {
+    "webstreamrmbg": "https://github.com/newman2x/WebStreamrMBG"
   },
   "domainSources": {
     "doomAddon": "https://raw.githubusercontent.com/ummarm/Doom-addon/main/domains.json",

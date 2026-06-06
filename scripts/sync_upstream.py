@@ -35,6 +35,8 @@ YORUIX_UPSTREAM_TREE_API = "https://api.github.com/repos/yoruix/nuvio-providers/
 YORUIX_MANIFEST_URL = "https://raw.githubusercontent.com/yoruix/nuvio-providers/refs/heads/main/manifest.json"
 FLIX_STREAMS_MANIFEST_URL = "https://flixnest.app/flix-streams/u/6p9xzp78nunz/manifest.json"
 MURPH_MANIFEST_URL = "https://badboysxs-morpheus.hf.space/manifest.json"
+WEBSTREAMRMBG_REPOSITORY_URL = "https://github.com/newman2x/WebStreamrMBG"
+WEBSTREAMRMBG_MANIFEST_URL = "https://87d6a6ef6b58-webstreamrmbg.baby-beamup.club/manifest.json"
 ADDON_DOMAINS_URL = "https://raw.githubusercontent.com/ummarm/Doom-addon/main/domains.json"
 UPSTREAM_DOMAINS_URL = "https://raw.githubusercontent.com/phisher98/TVVVV/refs/heads/main/domains.json"
 USER_AGENT = "Doom-addon direct upstream sync"
@@ -45,6 +47,10 @@ DEFAULT_UPSTREAMS = {
         "yoruix": YORUIX_MANIFEST_URL,
         "flixnest": FLIX_STREAMS_MANIFEST_URL,
         "murph": MURPH_MANIFEST_URL,
+        "webstreamrmbg": WEBSTREAMRMBG_MANIFEST_URL,
+    },
+    "repositories": {
+        "webstreamrmbg": WEBSTREAMRMBG_REPOSITORY_URL,
     },
     "domainSources": {
         "doomAddon": ADDON_DOMAINS_URL,
@@ -825,7 +831,7 @@ def load_upstreams() -> dict:
         print("Warning: upstream config was not an object, using defaults.")
         return upstreams
 
-    for section in ("manifests", "domainSources"):
+    for section in ("manifests", "repositories", "domainSources"):
         current = upstreams.setdefault(section, {})
         incoming = configured.get(section)
         if isinstance(incoming, dict):
@@ -1397,7 +1403,9 @@ def main() -> int:
 
     flixnest_manifest_url = manifests.get("flixnest", FLIX_STREAMS_MANIFEST_URL)
     murph_manifest_url = manifests.get("murph", MURPH_MANIFEST_URL)
+    webstreamrmbg_manifest_url = manifests.get("webstreamrmbg", WEBSTREAMRMBG_MANIFEST_URL)
     sync_warnings.extend(check_manifest_available("Flixnest", flixnest_manifest_url))
+    sync_warnings.extend(check_manifest_available("WebStreamrMBG", webstreamrmbg_manifest_url))
     sync_warnings.extend(check_murph_manifest(murph_manifest_url))
 
     changed_ids = {provider.scraper_id for provider in changed_providers} | changed_domain_ids
@@ -1432,6 +1440,8 @@ def main() -> int:
         f"- `{flixnest_manifest_url}`",
         f"- `{UPSTREAM_DOMAINS_URL}`",
         f"- `{murph_manifest_url}`",
+        f"- `{webstreamrmbg_manifest_url}`",
+        f"- `{upstreams.get('repositories', {}).get('webstreamrmbg', WEBSTREAMRMBG_REPOSITORY_URL)}`",
     ]
     if changed_ids:
         summary_lines.extend(["", f"Updated scrapers: `{changed_names}`", "", "Version bumps:"])
