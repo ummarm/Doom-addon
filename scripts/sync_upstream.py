@@ -1073,6 +1073,33 @@ def normalize_domain_value(value: object) -> str:
     return ""
 
 
+def extract_first_domain(text: str, contains: str) -> str:
+    pattern = re.compile(r"""https?://[^'"`\s)]+""")
+    for match in pattern.finditer(text):
+        value = match.group(0).rstrip("/")
+        if contains.lower() in value.lower():
+            return value
+    return ""
+
+
+def upstream_provider_domain_defaults() -> tuple[dict[str, str], list[str]]:
+    defaults: dict[str, str] = {}
+    warnings: list[str] = []
+    checks = (
+        ("4khdhub", f"{YORUIX_UPSTREAM_RAW_BASE}/providers/4khdhub.js", "4khdhub"),
+        ("HDHUB4u", f"{YORUIX_UPSTREAM_RAW_BASE}/providers/hdhub4u.js", "hdhub4u"),
+    )
+    for local_key, url, contains in checks:
+        try:
+            value = extract_first_domain(fetch_text(url), contains)
+        except Exception as exc:
+            warnings.append(f"Domain sync could not inspect `{url}`: {exc}")
+            continue
+        if value:
+            defaults[local_key] = value
+    return defaults, warnings
+
+
 def sync_domains() -> tuple[set[str], list[str]]:
     warnings: list[str] = []
     try:
@@ -1082,6 +1109,9 @@ def sync_domains() -> tuple[set[str], list[str]]:
 
     if not isinstance(upstream, dict):
         return set(), ["Domain sync failed: upstream domains payload was not an object."]
+
+    provider_defaults, provider_domain_warnings = upstream_provider_domain_defaults()
+    warnings.extend(provider_domain_warnings)
 
     local = json.loads((REPO_ROOT / "domains.json").read_text(encoding="utf-8"))
     domain_map = {
@@ -1094,7 +1124,11 @@ def sync_domains() -> tuple[set[str], list[str]]:
 
     changed_ids: set[str] = set()
     for local_key, (upstream_key, affected_ids) in domain_map.items():
-        next_value = normalize_domain_value(upstream.get(upstream_key) or upstream.get(local_key))
+        next_value = normalize_domain_value(
+            provider_defaults.get(local_key)
+            or upstream.get(upstream_key)
+            or upstream.get(local_key)
+        )
         if not next_value:
             warnings.append(f"Domain sync did not find `{upstream_key}` in upstream domains.")
             continue

@@ -361,6 +361,7 @@ async function resolveMediaInfo(tmdbId, mediaType) {
 
 function qualityRank(value) {
   const text = String(value || "").toLowerCase();
+  if (/\b(?:remux|uhd)\b/.test(text)) return 5;
   if (/\b2160p?\b/.test(text) || /(^|[^a-z0-9])4k([^a-z0-9]|$)/.test(text)) return 5;
   if (/\b1440p?\b/.test(text) || /(^|[^a-z0-9])2k([^a-z0-9]|$)/.test(text)) return 4;
   if (/\b1080p?\b/.test(text)) return 3;
@@ -388,12 +389,35 @@ function streamQualityText(stream) {
   ].filter(Boolean).join(" ");
 }
 
+function streamQualityRank(stream) {
+  const behaviorHints = stream && stream.behaviorHints;
+  const primaryText = [
+    qualityEvidenceText(stream && stream.name),
+    stream && stream.quality
+  ].filter(Boolean).join(" ");
+  const primaryRank = qualityRank(primaryText);
+  if (primaryRank) {
+    return primaryRank;
+  }
+
+  const filenameRank = qualityRank(behaviorHints && behaviorHints.filename);
+  if (filenameRank) {
+    return filenameRank;
+  }
+
+  return qualityRank(streamQualityText(stream));
+}
+
 function streamQualityBand(stream) {
   const text = streamQualityText(stream);
-  if (/\b(?:remux|uhd|2160p|2160)\b/i.test(text) || /(^|[^a-z0-9])4k([^a-z0-9]|$)/i.test(text)) {
+  const rank = streamQualityRank(stream);
+  if (rank >= 5 || /\b(?:remux|uhd)\b/i.test(text)) {
     return "4k";
   }
-  if (/\b(?:720p|720|480p|480|360p|360|240p|240|144p|144)\b/i.test(text)) {
+  if (rank === 3) {
+    return "1080";
+  }
+  if (rank > 0 || /\b(?:720p|720|480p|480|360p|360|240p|240|144p|144)\b/i.test(text)) {
     return "low";
   }
   return "1080";
@@ -618,12 +642,6 @@ function streamRequiresProbe(stream) {
   return Boolean(stream.behaviorHints && [
     "4khdhubnew",
     "4khdhub_yoruix",
-    "flix_streams_archivevault",
-    "flix_streams_emby",
-    "flix_streams_lotusvault",
-    "flix_streams_mkvcinemas",
-    "flix_streams_other",
-    "flix_streams_uhdmovies",
     "hdhub4u",
     "hdhub4u_yoruix",
     "hdhub4u_murph",
@@ -1583,24 +1601,19 @@ function compareStreamSizesAscending(a, b) {
 
 function sortStreams(streams, options = {}) {
   return streams.sort((a, b) => {
-    const sizeOrder = compareStreamSizesAscending(a, b);
-    if (options.qualityBand && sizeOrder !== 0) {
-      return sizeOrder;
-    }
-
     const hindiA = isPassthroughStream(a) && hasHindiLanguage(a);
     const hindiB = isPassthroughStream(b) && hasHindiLanguage(b);
     if (hindiA !== hindiB) {
       return hindiB ? 1 : -1;
     }
 
-    const rankA = qualityRank(streamQualityText(a));
-    const rankB = qualityRank(streamQualityText(b));
+    const rankA = streamQualityRank(a);
+    const rankB = streamQualityRank(b);
     if (rankA !== rankB) {
       return rankB - rankA;
     }
 
-    return sizeOrder;
+    return compareStreamSizesAscending(a, b);
   });
 }
 
@@ -1723,13 +1736,16 @@ async function getStreams(type, id, options = {}) {
       ]);
 
       const providerResults = state.results.filter(Boolean);
+      const fastProbeTimeoutMs = entries.some((provider) => provider.id.startsWith("flix_streams_"))
+        ? STREAM_PROBE_TIMEOUT_MS
+        : STREAM_FAST_PROBE_TIMEOUT_MS;
       const streams = await finalizeStreams(providerResults, {
         logFailures: false,
         mediaInfo: state.mediaInfo,
         parsed: state.parsed,
         providerEntries: entries,
         probeOnlyRequired: true,
-        probeTimeoutMs: STREAM_FAST_PROBE_TIMEOUT_MS,
+        probeTimeoutMs: fastProbeTimeoutMs,
         qualityBand
       });
 
