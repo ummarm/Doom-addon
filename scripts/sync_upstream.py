@@ -743,6 +743,7 @@ PROVIDERS = (
     Provider("movies4u", ("providers/movies4u.js",), "providers/movies4u.js", ("movies4u",)),
     Provider("netmirror", ("providers/netmirror.js",), "providers/netmirror.js", ("netmirror",)),
     Provider("peachify", ("providers/peachify.js",), "providers/peachify.js", ("peachify",)),
+    Provider("vegamovies", ("providers/vegamovies.js",), "providers/vegamovies.js", ("vegamovies", "hubcloud")),
     Provider("vidlink", ("providers/vidlink.js",), "providers/vidlink.js", ("vidlink",)),
     Provider("uhdmovies", ("providers/uhdmovies.js",), "providers/uhdmovies.js", ("uhdmovies",)),
     Provider("4khdhubnew", ("providers/4khdhubnew.js",), "providers/4khdhubnew.js", ("4khdhubnew", "4khdhub", "hubcloud")),
@@ -922,6 +923,18 @@ def patch_domain_source(text: str) -> str:
     return updated
 
 
+def patch_vegamovies_domain_source(text: str) -> str:
+    updated, count = re.subn(
+        r"""DOMAINS_JSON_URL\s*=\s*(?:"[^"]+"|'[^']+'|_0x[a-fA-F0-9]+\([^)]*\))""",
+        f'DOMAINS_JSON_URL = "{ADDON_DOMAINS_URL}"',
+        text,
+        count=1,
+    )
+    if count != 1:
+        raise RuntimeError("Could not retarget DOMAINS_JSON_URL to Doom-addon domains.json")
+    return updated
+
+
 def patch_moviesdrive_domain_source(text: str) -> str:
     if "DOMAIN_JSON_URL" in text:
         updated, count = re.subn(
@@ -1010,6 +1023,8 @@ def patch_moviebox_crypto_source(text: str) -> str:
 def transform_source(provider: Provider, text: str) -> str:
     if provider.scraper_id in {"4khdhub", "4khdhubtv", "4khdhubnew", "hdhub4u", "4khdhub_yoruix", "hdhub4u_yoruix"} and "DOMAINS_URL" in text:
         text = patch_domain_source(text)
+    elif provider.scraper_id == "vegamovies":
+        text = patch_vegamovies_domain_source(text)
     elif provider.scraper_id == "moviesdrive":
         text = patch_moviesdrive_domain_source(text)
     if provider.scraper_id in {"moviebox", "movieboxhindi", "moviebox_yoruix"}:
@@ -1072,6 +1087,8 @@ def sync_domains() -> tuple[set[str], list[str]]:
     domain_map = {
         "4khdhub": ("4khdhub", {"4khdhub", "4khdhubtv", "4khdhub_yoruix", "4khdhubnew"}),
         "HDHUB4u": ("HDHUB4u", {"hdhub4u", "hdhub4u_yoruix"}),
+        "vegamovies": ("vegamovies", {"vegamovies"}),
+        "hubcloud": ("hubcloud", {"vegamovies", "4khdhub", "4khdhubnew", "4khdhub_yoruix"}),
         "Moviesdrive": ("moviesdrive", {"moviesdrive"}),
     }
 

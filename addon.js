@@ -55,6 +55,7 @@ const addonGroups = {
       "moviesdrive",
       "netmirror",
       "peachify",
+      "vegamovies",
       "vidlink",
       "streamflix",
       "uhdmovies",
@@ -629,6 +630,7 @@ function streamRequiresProbe(stream) {
     "movieblast_yoruix",
     "moviebox_yoruix",
     "peachify",
+    "vegamovies",
     "uhdmovies_yoruix",
     "vidlink"
   ].includes(stream.behaviorHints.doomProviderId));
@@ -770,6 +772,7 @@ const UMBRELLA_PROVIDER_CODES = {
   "netmirror": "NM",
   "netmirror_yoruix": "NM Y",
   "peachify": "PF",
+  "vegamovies": "VG DR",
   "vidlink": "VL DR",
   "streamflix": "SF",
   "uhdmovies": "UHD DR",
@@ -809,6 +812,7 @@ const SOURCE_DETAIL_NAMES = {
   "netmirror": "Darth Vader",
   "netmirror_yoruix": "Darth Vader",
   "peachify": "Darth Vader",
+  "vegamovies": "Darth Vader",
   "vidlink": "Darth Vader",
   "streamflix": "Darth Vader",
   "uhdmovies": "Darth Vader",
@@ -1361,6 +1365,11 @@ function shouldKeepProviderStream(rawStream, provider) {
 
   if (provider.id === "vidlink") {
     return /\b1080p\b/i.test(text);
+  }
+
+  if (provider.id === "vegamovies") {
+    const rank = qualityRank(text);
+    return rank >= 2 && rank <= 5 && /\b(?:hindi|hin|english|eng|dual|multi)\b/i.test(text);
   }
 
   if (provider.id !== "movieblast" && provider.id !== "movieblast_yoruix") {
