@@ -185,8 +185,9 @@ The stream endpoint shape is:
 ## Notes
 
 - Provider files sync directly from the original upstream sources:
-  `https://github.com/D3adlyRocket/All-in-One-Nuvio`,
-  `https://github.com/yoruix/nuvio-providers`, and
+  `https://raw.githubusercontent.com/D3adlyRocket/All-in-One-Nuvio/refs/heads/main/manifest.json`,
+  `https://raw.githubusercontent.com/yoruix/nuvio-providers/refs/heads/main/manifest.json`,
+  `https://flixnest.app/flix-streams/u/6p9xzp78nunz/manifest.json`, and
   `https://badboysxs-morpheus.hf.space/manifest.json`.
 - If you keep redistributing these files, keep the original license terms and
   attribution in mind.
@@ -218,8 +219,8 @@ This repo includes a GitHub Actions workflow at
 `.github/workflows/upstream-sync.yml`.
 
 - Doom-addon no longer syncs from Doom-plug.
-- The workflow checks the original upstream sources automatically and applies
-  real sync work every 2 days, anchored from `2026-04-20`.
+- The workflow checks the original upstream sources automatically every day and
+  applies real sync work according to `upstreams.json`.
 - If a tracked upstream provider changes, the workflow updates Doom-addon's
   provider file, retargets domain lookups to this repo's `domains.json`, updates
   `providers.json`, `manifest.json`, and `package.json`, and commits the update
