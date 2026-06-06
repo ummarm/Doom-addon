@@ -1082,26 +1082,80 @@ def extract_first_domain(text: str, contains: str) -> str:
     return ""
 
 
-def upstream_provider_domain_defaults() -> tuple[dict[str, str], list[str]]:
-    defaults: dict[str, str] = {}
+def domain_patterns_by_local_key() -> dict[str, tuple[str, ...]]:
+    return {
+        "4khdhub": ("4khdhub",),
+        "HDHUB4u": ("hdhub4u",),
+        "vegamovies": ("vegamovies",),
+        "hubcloud": ("hubcloud",),
+        "Moviesdrive": ("moviesdrive", "moviesdrives"),
+    }
+
+
+def raw_domain_candidates_by_local_key(upstream_tree_cache: dict[str, list[str]]) -> tuple[dict[str, list[str]], list[str]]:
+    candidates: dict[str, list[str]] = {key: [] for key in domain_patterns_by_local_key()}
     warnings: list[str] = []
-    checks = (
-        ("4khdhub", f"{YORUIX_UPSTREAM_RAW_BASE}/providers/4khdhub.js", "4khdhub"),
-        ("HDHUB4u", f"{YORUIX_UPSTREAM_RAW_BASE}/providers/hdhub4u.js", "hdhub4u"),
-    )
-    for local_key, url, contains in checks:
-        try:
-            value = extract_first_domain(fetch_text(url), contains)
-        except Exception as exc:
-            warnings.append(f"Domain sync could not inspect `{url}`: {exc}")
+
+    for provider in PROVIDERS:
+        if provider.scraper_id in PAUSED_UPSTREAM_PROVIDER_IDS:
             continue
-        if value:
-            defaults[local_key] = value
+        try:
+            upstream_tree_paths = upstream_tree_cache.get(provider.upstream_tree_api)
+            if upstream_tree_paths is None:
+                upstream_tree_paths = fetch_upstream_tree_paths(provider.upstream_tree_api)
+                upstream_tree_cache[provider.upstream_tree_api] = upstream_tree_paths
+        except Exception as exc:
+            upstream_tree_paths = []
+            warnings.append(f"Domain sync could not list raw paths for `{provider.scraper_id}`: {exc}")
+
+        for upstream_path in candidate_upstream_paths(provider, upstream_tree_paths):
+            try:
+                text = fetch_text(f"{provider.upstream_raw_base}/{upstream_path}")
+                break
+            except HTTPError as exc:
+                if exc.code == 404:
+                    continue
+                warnings.append(f"Domain sync could not inspect `{provider.scraper_id}` raw path `{upstream_path}`: {exc}")
+                text = ""
+                break
+            except Exception as exc:
+                warnings.append(f"Domain sync could not inspect `{provider.scraper_id}` raw path `{upstream_path}`: {exc}")
+                text = ""
+                break
+        else:
+            text = ""
+
+        if not text:
+            continue
+
+        for local_key, patterns in domain_patterns_by_local_key().items():
+            for pattern in patterns:
+                value = extract_first_domain(text, pattern)
+                if value and value not in candidates[local_key]:
+                    candidates[local_key].append(value)
+
+    return candidates, warnings
+
+
+def preferred_raw_domain_defaults(upstream_tree_cache: dict[str, list[str]]) -> tuple[dict[str, str], list[str]]:
+    defaults: dict[str, str] = {}
+    candidates, warnings = raw_domain_candidates_by_local_key(upstream_tree_cache)
+    for local_key, values in candidates.items():
+        if not values:
+            continue
+        if local_key == "4khdhub":
+            preferred = next((value for value in values if "4khdhub.click" in value), values[0])
+        elif local_key == "HDHUB4u":
+            preferred = next((value for value in values if "new6.hdhub4u.fo" in value), values[0])
+        else:
+            preferred = values[0]
+        defaults[local_key] = preferred
     return defaults, warnings
 
 
-def sync_domains() -> tuple[set[str], list[str]]:
+def sync_domains(upstream_tree_cache: dict[str, list[str]] | None = None) -> tuple[set[str], list[str]]:
     warnings: list[str] = []
+    upstream_tree_cache = upstream_tree_cache if upstream_tree_cache is not None else {}
     try:
         upstream = fetch_json(UPSTREAM_DOMAINS_URL)
     except Exception as exc:
@@ -1110,7 +1164,7 @@ def sync_domains() -> tuple[set[str], list[str]]:
     if not isinstance(upstream, dict):
         return set(), ["Domain sync failed: upstream domains payload was not an object."]
 
-    provider_defaults, provider_domain_warnings = upstream_provider_domain_defaults()
+    provider_defaults, provider_domain_warnings = preferred_raw_domain_defaults(upstream_tree_cache)
     warnings.extend(provider_domain_warnings)
 
     local = json.loads((REPO_ROOT / "domains.json").read_text(encoding="utf-8"))
@@ -1253,10 +1307,10 @@ def main() -> int:
 
     changed_providers: list[ResolvedProvider] = []
     sync_warnings: list[str] = []
-    changed_domain_ids, domain_warnings = sync_domains()
-    sync_warnings.extend(domain_warnings)
     upstream_tree_cache: dict[str, list[str]] = {}
     upstream_manifest_cache: dict[str, list[str]] = {}
+    changed_domain_ids, domain_warnings = sync_domains(upstream_tree_cache)
+    sync_warnings.extend(domain_warnings)
 
     for provider in PROVIDERS:
         if provider.scraper_id in PAUSED_UPSTREAM_PROVIDER_IDS:
