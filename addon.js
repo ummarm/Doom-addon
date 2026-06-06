@@ -614,7 +614,24 @@ async function responseSample(response) {
 }
 
 function streamRequiresProbe(stream) {
-  return Boolean(stream.behaviorHints && ["4khdhubnew", "hdhub4u", "hdhub4u_yoruix", "hdhub4u_murph", "peachify", "vidlink"].includes(stream.behaviorHints.doomProviderId));
+  return Boolean(stream.behaviorHints && [
+    "4khdhubnew",
+    "4khdhub_yoruix",
+    "flix_streams_archivevault",
+    "flix_streams_emby",
+    "flix_streams_lotusvault",
+    "flix_streams_mkvcinemas",
+    "flix_streams_other",
+    "flix_streams_uhdmovies",
+    "hdhub4u",
+    "hdhub4u_yoruix",
+    "hdhub4u_murph",
+    "movieblast_yoruix",
+    "moviebox_yoruix",
+    "peachify",
+    "uhdmovies_yoruix",
+    "vidlink"
+  ].includes(stream.behaviorHints.doomProviderId));
 }
 
 function isFastAcceptableStream(stream) {
