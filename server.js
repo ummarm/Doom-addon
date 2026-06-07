@@ -287,6 +287,7 @@ const server = http.createServer(async (request, response) => {
           `Umbrella Y: ${url.origin}/addons/yoruix/manifest.json`,
           `Umbrella D: ${url.origin}/addons/d3adlyrocket/manifest.json`,
           `Umbrella F: ${url.origin}/addons/flixnest/manifest.json`,
+          `Torbox: ${url.origin}/addons/torbox/manifest.json`,
           `Umbrella MF: ${url.origin}/addons/mediafusion/manifest.json`,
           `Umbrella AIO: ${url.origin}/addons/aiostreams/manifest.json`,
           `Umbrella 4K: ${url.origin}/addons/quality-4k/manifest.json`,
@@ -329,7 +330,9 @@ const server = http.createServer(async (request, response) => {
         sendJson(response, 404, { error: "Add-on group not found" });
         return;
       }
-      const cacheSeconds = scopeHasProvider(streamRequest.scope, "aiostreams") ? 0 : 300;
+      const disableStreamCache = scopeHasProvider(streamRequest.scope, "aiostreams")
+        || scopeHasProvider(streamRequest.scope, "torbox");
+      const cacheSeconds = disableStreamCache ? 0 : 300;
       const responseStreams = scopeHasProvider(streamRequest.scope, "aiostreams")
         ? redirectAioStreams(streams, streamRequest, url.origin)
         : streams;

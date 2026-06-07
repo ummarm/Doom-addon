@@ -81,6 +81,11 @@ const addonGroups = {
     name: "Umbrella W",
     providerIds: ["webstreamrmbg"]
   },
+  torbox: {
+    name: "Torbox",
+    providerIds: ["torbox"],
+    waitForFull: true
+  },
   mediafusion: {
     name: "Umbrella MF",
     providerIds: ["mediafusion"]
@@ -121,6 +126,8 @@ const addonManifests = Object.fromEntries(
         ? `${group.name} provider group for Doom-addon. Passes MediaFusion streams through with Hindi/English detection, blocked source-tag filtering, cached/playable placeholder rejection, and Hindi-first quality/size sorting.`
         : slug === "aiostreams"
           ? `${group.name} provider group for Doom-addon. Passes AIOStreams streams through without Umbrella formatting or extra filtering.`
+          : slug === "torbox"
+            ? `${group.name} provider group for Doom-addon. Passes Torbox streams through unchanged, then applies only sorting and quality-tab filtering.`
           : group.qualityBand
             ? `${group.name} quality group for Doom-addon. Uses all enabled providers and keeps the main add-on rules, with streams routed by quality.`
             : `${group.name} provider group for Doom-addon. Uses the same Umbrella formatting, filtering, sorting, and playable checks as the main add-on.`
@@ -129,7 +136,7 @@ const addonManifests = Object.fromEntries(
 );
 const streamCache = new Map();
 const streamInflight = new Map();
-const passthroughProviderIds = new Set(["mediafusion", "aiostreams"]);
+const passthroughProviderIds = new Set(["mediafusion", "aiostreams", "torbox"]);
 const passthroughStreams = new WeakSet();
 
 function loadProvider(provider) {
@@ -791,6 +798,7 @@ const UMBRELLA_PROVIDER_CODES = {
   "flix_streams_other": "FLX",
   "flix_streams_vegamovies": "VG",
   "webstreamrmbg": "WSM",
+  "torbox": "TB",
   "mediafusion": "MF",
   "hindmoviez": "HM",
   "movieblast": "MBL",
@@ -835,6 +843,7 @@ const SOURCE_DETAIL_NAMES = {
   "flix_streams_other": "Darth Vader",
   "flix_streams_vegamovies": "Darth Vader",
   "webstreamrmbg": "Darth Vader",
+  "torbox": "Torbox",
   "mediafusion": "Darth Vader",
   "hindmoviez": "Darth Vader",
   "movieblast": "Darth Vader",
@@ -1697,8 +1706,9 @@ async function getStreams(type, id, options = {}) {
   }
   const group = addonGroups[scope] || {};
   const qualityBand = options.qualityBand || group.qualityBand || "";
-  const useFastResponse = !qualityBand;
-  const cacheStreamsForScope = useFastResponse && !entries.some((provider) => provider.id === "aiostreams");
+  const useFastResponse = !qualityBand && !group.waitForFull;
+  const cacheStreamsForScope = useFastResponse
+    && !entries.some((provider) => provider.id === "aiostreams" || provider.id === "torbox");
 
   const key = streamCacheKey(type, id, scope);
   if (cacheStreamsForScope) {

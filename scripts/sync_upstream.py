@@ -37,6 +37,7 @@ FLIX_STREAMS_MANIFEST_URL = "https://flixnest.app/flix-streams/u/6p9xzp78nunz/ma
 MURPH_MANIFEST_URL = "https://badboysxs-morpheus.hf.space/manifest.json"
 WEBSTREAMRMBG_REPOSITORY_URL = "https://github.com/newman2x/WebStreamrMBG"
 WEBSTREAMRMBG_MANIFEST_URL = "https://87d6a6ef6b58-webstreamrmbg.baby-beamup.club/manifest.json"
+TORBOX_MANIFEST_URL = "https://aiostreamsfortheweebsstable.midnightignite.me/stremio/4e02e39b-c022-4ce5-ad67-eeaca6b2fb5e/eyJpIjoid0k4WWxWZnQvaVhZNnkvTjZnN2sxUT09IiwiZSI6IlU4Z0tBYUp1WnQxaGJrQTgrT1FTS3Y0OWRmbG1wQVc1NzdLV1IzRGRBUWs9IiwidCI6ImEifQ/manifest.json"
 ADDON_DOMAINS_URL = "https://raw.githubusercontent.com/ummarm/Doom-addon/main/domains.json"
 UPSTREAM_DOMAINS_URL = "https://raw.githubusercontent.com/phisher98/TVVVV/refs/heads/main/domains.json"
 USER_AGENT = "Doom-addon direct upstream sync"
@@ -48,6 +49,7 @@ DEFAULT_UPSTREAMS = {
         "flixnest": FLIX_STREAMS_MANIFEST_URL,
         "murph": MURPH_MANIFEST_URL,
         "webstreamrmbg": WEBSTREAMRMBG_MANIFEST_URL,
+        "torbox": TORBOX_MANIFEST_URL,
     },
     "repositories": {
         "webstreamrmbg": WEBSTREAMRMBG_REPOSITORY_URL,
@@ -1404,8 +1406,10 @@ def main() -> int:
     flixnest_manifest_url = manifests.get("flixnest", FLIX_STREAMS_MANIFEST_URL)
     murph_manifest_url = manifests.get("murph", MURPH_MANIFEST_URL)
     webstreamrmbg_manifest_url = manifests.get("webstreamrmbg", WEBSTREAMRMBG_MANIFEST_URL)
+    torbox_manifest_url = manifests.get("torbox", TORBOX_MANIFEST_URL)
     sync_warnings.extend(check_manifest_available("Flixnest", flixnest_manifest_url))
     sync_warnings.extend(check_manifest_available("WebStreamrMBG", webstreamrmbg_manifest_url))
+    sync_warnings.extend(check_manifest_available("Torbox", torbox_manifest_url))
     sync_warnings.extend(check_murph_manifest(murph_manifest_url))
 
     changed_ids = {provider.scraper_id for provider in changed_providers} | changed_domain_ids
@@ -1442,6 +1446,7 @@ def main() -> int:
         f"- `{murph_manifest_url}`",
         f"- `{webstreamrmbg_manifest_url}`",
         f"- `{upstreams.get('repositories', {}).get('webstreamrmbg', WEBSTREAMRMBG_REPOSITORY_URL)}`",
+        f"- `{torbox_manifest_url}`",
     ]
     if changed_ids:
         summary_lines.extend(["", f"Updated scrapers: `{changed_names}`", "", "Version bumps:"])

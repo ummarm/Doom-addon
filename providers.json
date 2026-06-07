@@ -1,6 +1,6 @@
 {
   "name": "Doom-addon",
-  "version": "2.1.2",
+  "version": "2.1.3",
   "scrapers": [
     {
       "id": "4khdhub",
@@ -509,6 +509,29 @@
         "tv"
       ],
       "filename": "providers/webstreamrmbg.js",
+      "enabled": true,
+      "formats": [
+        "mp4",
+        "mkv",
+        "m3u8"
+      ],
+      "logo": "https://i.postimg.cc/9QZLkH7f/umbrella.png",
+      "contentLanguage": [
+        "en",
+        "hi"
+      ]
+    },
+    {
+      "id": "torbox",
+      "name": "Torbox",
+      "description": "Torbox AIOStreams instance passed through unchanged with Doom-addon sorting and quality-tab filtering only",
+      "version": "1.0.0",
+      "author": "ummarm",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/torbox.js",
       "enabled": true,
       "formats": [
         "mp4",
