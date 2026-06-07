@@ -1630,18 +1630,44 @@ function compareStreamSizesAscending(a, b) {
   return 0;
 }
 
+function streamLanguageText(stream) {
+  const behaviorHints = stream && stream.behaviorHints;
+  return [
+    stream && stream.name,
+    stream && stream.title,
+    stream && stream.description,
+    stream && stream.language,
+    stream && stream.languages,
+    behaviorHints && behaviorHints.filename,
+    behaviorHints && behaviorHints.bingeGroup
+  ].filter(Boolean).join(" ");
+}
+
+function streamLanguageSortRank(stream) {
+  const text = streamLanguageText(stream);
+  const hasHindi = /\b(?:hindi|hin)\b|🇮🇳/i.test(text);
+  const hasEnglish = /\b(?:english|eng)\b|🇬🇧|🇺🇸/i.test(text);
+  const hasRegional = /\b(?:punjabi|pun|tamil|tam|telugu|tel|malayalam|mal|kannada|kan)\b/i.test(text);
+
+  if (hasHindi && hasEnglish) return 0;
+  if (hasHindi && !hasEnglish && !hasRegional) return 1;
+  if (hasHindi && hasRegional) return 2;
+  if (hasEnglish) return 3;
+  return 4;
+}
+
 function sortStreams(streams, options = {}) {
   return streams.sort((a, b) => {
-    const hindiA = isPassthroughStream(a) && hasHindiLanguage(a);
-    const hindiB = isPassthroughStream(b) && hasHindiLanguage(b);
-    if (hindiA !== hindiB) {
-      return hindiB ? 1 : -1;
-    }
-
     const rankA = streamQualityRank(a);
     const rankB = streamQualityRank(b);
     if (rankA !== rankB) {
       return rankB - rankA;
+    }
+
+    const languageRankA = streamLanguageSortRank(a);
+    const languageRankB = streamLanguageSortRank(b);
+    if (languageRankA !== languageRankB) {
+      return languageRankA - languageRankB;
     }
 
     return compareStreamSizesAscending(a, b);
