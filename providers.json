@@ -1,6 +1,6 @@
 {
   "name": "Doom-addon",
-  "version": "2.1.4",
+  "version": "2.1.5",
   "scrapers": [
     {
       "id": "4khdhub",
@@ -48,7 +48,7 @@
       "id": "4khdhub_yoruix",
       "name": "4KHDHub Yoruix",
       "description": "Alternate 4KHDHub implementation synced from yoruix/nuvio-providers",
-      "version": "1.0.3",
+      "version": "1.0.4",
       "author": "ummarm",
       "supportedTypes": [
         "movie",
@@ -69,7 +69,7 @@
       "id": "hdhub4u",
       "name": "HDHub4u",
       "description": "Direct links from HDHub4u with high-speed download support",
-      "version": "1.0.9",
+      "version": "1.0.10",
       "author": "ummarm",
       "supportedTypes": [
         "movie",
@@ -159,7 +159,7 @@
       "id": "hdhub4u_yoruix",
       "name": "HDHub4u Yoruix",
       "description": "Alternate HDHub4u implementation synced from yoruix/nuvio-providers",
-      "version": "1.0.6",
+      "version": "1.0.7",
       "author": "ummarm",
       "supportedTypes": [
         "movie",
@@ -182,7 +182,7 @@
       "id": "moviebox_yoruix",
       "name": "MovieBox Yoruix",
       "description": "Alternate MovieBox implementation synced from yoruix/nuvio-providers",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "author": "ummarm",
       "supportedTypes": [
         "movie",
@@ -204,7 +204,7 @@
       "id": "netmirror_yoruix",
       "name": "NetMirror Yoruix",
       "description": "Alternate NetMirror implementation synced from yoruix/nuvio-providers",
-      "version": "1.0.4",
+      "version": "1.0.5",
       "author": "ummarm",
       "supportedTypes": [
         "movie",
@@ -227,7 +227,7 @@
       "id": "uhdmovies_yoruix",
       "name": "UHDMovies Yoruix",
       "description": "Alternate UHDMovies implementation synced from yoruix/nuvio-providers",
-      "version": "1.2.1",
+      "version": "1.2.2",
       "author": "ummarm",
       "supportedTypes": [
         "movie",
@@ -250,7 +250,7 @@
       "id": "movieblast_yoruix",
       "name": "MovieBlast Yoruix",
       "description": "Alternate MovieBlast implementation synced from yoruix/nuvio-providers, filtered to Hindi streams",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "author": "ummarm",
       "supportedTypes": [
         "movie",
