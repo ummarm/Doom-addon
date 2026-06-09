@@ -13,6 +13,8 @@ const STREAM_CACHE_MAX_ENTRIES = Number(process.env.STREAM_CACHE_MAX_ENTRIES || 
 const STREAM_FAST_PROVIDER_WAIT_MS = Number(process.env.STREAM_FAST_PROVIDER_WAIT_MS || 25000);
 const STREAM_FAST_PROBE_TIMEOUT_MS = Number(process.env.STREAM_FAST_PROBE_TIMEOUT_MS || 2500);
 const MEDIAFUSION_PROBE_TIMEOUT_MS = Number(process.env.MEDIAFUSION_PROBE_TIMEOUT_MS || 8000);
+const QUALITY_SHARED_CACHE_SCOPE = "quality-shared";
+const QUALITY_TV_FAST_WAIT_MS = Number(process.env.QUALITY_TV_FAST_WAIT_MS || STREAM_FAST_PROVIDER_WAIT_MS);
 
 const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "manifest.json"), "utf8"));
 const providerRegistry = JSON.parse(fs.readFileSync(path.join(ROOT, "providers.json"), "utf8"));
@@ -1724,6 +1726,138 @@ function scopeHasProvider(scope, providerId) {
   return Array.isArray(entries) && entries.some((provider) => provider.id === providerId);
 }
 
+function entriesHaveProvider(entries, providerId) {
+  return Array.isArray(entries) && entries.some((provider) => provider.id === providerId);
+}
+
+function isLiveSensitiveProvider(provider) {
+  return Boolean(provider && (provider.id === "aiostreams" || provider.id === "torbox"));
+}
+
+function isLikelyAndroidTvRequest(headers = {}) {
+  const userAgent = String(headers["user-agent"] || headers["User-Agent"] || "");
+  return /android/i.test(userAgent)
+    && /(?:tv|aft|bravia|shield|chromecast|mi\s*box|nuvio)/i.test(userAgent);
+}
+
+function finalizedBuild(type, id, entries, requestContext = {}, options = {}) {
+  const buildStatePromise = startStreamBuild(type, id, entries, {
+    requestHeaders: requestContext.requestHeaders || {}
+  });
+
+  const fullPromise = buildStatePromise
+    .then(async (state) => {
+      if (!state) {
+        return [];
+      }
+      await state.donePromise;
+      return finalizeStreams(state.results, {
+        logFailures: options.logFailures !== false,
+        mediaInfo: state.mediaInfo,
+        parsed: state.parsed,
+        providerEntries: entries,
+        probeOnlyRequired: true,
+        probeTimeoutMs: options.probeTimeoutMs,
+        qualityBand: options.qualityBand || ""
+      });
+    })
+    .catch((error) => {
+      console.error(`[Stream build] ${options.cacheKey || `${type}:${id}`}: ${error.message || error}`);
+      return [];
+    });
+
+  const fastPromise = buildStatePromise
+    .then(async (state) => {
+      if (!state) {
+        return [];
+      }
+
+      await Promise.race([
+        state.donePromise,
+        delay(Math.max(0, options.fastWaitMs || STREAM_FAST_PROVIDER_WAIT_MS))
+      ]);
+
+      const providerResults = state.results.filter(Boolean);
+      const fastProbeTimeoutMs = entries.some((provider) => provider.id.startsWith("flix_streams_"))
+        ? STREAM_PROBE_TIMEOUT_MS
+        : STREAM_FAST_PROBE_TIMEOUT_MS;
+      const streams = await finalizeStreams(providerResults, {
+        logFailures: false,
+        mediaInfo: state.mediaInfo,
+        parsed: state.parsed,
+        providerEntries: entries,
+        probeOnlyRequired: true,
+        probeTimeoutMs: options.probeTimeoutMs || fastProbeTimeoutMs,
+        qualityBand: options.qualityBand || ""
+      });
+
+      if (streams.length > 0) {
+        console.log(`[Stream fast] Returning ${streams.length} early streams for ${options.cacheKey || `${type}:${id}`}`);
+        return streams;
+      }
+
+      return fullPromise;
+    })
+    .catch((error) => {
+      console.error(`[Stream fast] ${options.cacheKey || `${type}:${id}`}: ${error.message || error}`);
+      return fullPromise;
+    });
+
+  return { fullPromise, fastPromise };
+}
+
+function qualitySortFromStreams(streams, qualityBand) {
+  return sortStreams(filterStreamsByQualityBand(streams.slice(), qualityBand), { qualityBand });
+}
+
+async function getQualityBandStreams(type, id, entries, qualityBand, requestContext = {}) {
+  const sharedEntries = entries.filter((provider) => !isLiveSensitiveProvider(provider));
+  const liveEntries = entries.filter(isLiveSensitiveProvider);
+  const androidTvFastResponse = isLikelyAndroidTvRequest(requestContext.requestHeaders);
+  const sharedKey = streamCacheKey(type, id, QUALITY_SHARED_CACHE_SCOPE);
+
+  let sharedFullPromise = Promise.resolve([]);
+  let sharedFastPromise = sharedFullPromise;
+  const cachedSharedStreams = sharedEntries.length ? cachedStreams(sharedKey) : null;
+  if (cachedSharedStreams) {
+    console.log(`[Stream cache] Hit for ${sharedKey} (${cachedSharedStreams.length} streams)`);
+    sharedFullPromise = Promise.resolve(cachedSharedStreams);
+    sharedFastPromise = sharedFullPromise;
+  } else if (sharedEntries.length > 0 && streamInflight.has(sharedKey)) {
+    console.log(`[Stream cache] Joining shared quality build for ${sharedKey}`);
+    const inflight = streamInflight.get(sharedKey);
+    sharedFullPromise = inflight.fullPromise;
+    sharedFastPromise = inflight.fastPromise || inflight.fullPromise;
+  } else if (sharedEntries.length > 0) {
+    const sharedBuild = finalizedBuild(type, id, sharedEntries, requestContext, {
+      cacheKey: sharedKey,
+      fastWaitMs: QUALITY_TV_FAST_WAIT_MS
+    });
+    sharedFullPromise = sharedBuild.fullPromise
+      .then((streams) => {
+        rememberStreams(sharedKey, streams);
+        return streams;
+      })
+      .finally(() => {
+        streamInflight.delete(sharedKey);
+      });
+    sharedFastPromise = sharedBuild.fastPromise;
+    streamInflight.set(sharedKey, { fullPromise: sharedFullPromise, fastPromise: sharedFastPromise });
+  }
+
+  const liveBuild = liveEntries.length > 0
+    ? finalizedBuild(type, id, liveEntries, requestContext, {
+      cacheKey: streamCacheKey(type, id, `${QUALITY_SHARED_CACHE_SCOPE}:live`),
+      fastWaitMs: QUALITY_TV_FAST_WAIT_MS
+    })
+    : { fullPromise: Promise.resolve([]), fastPromise: Promise.resolve([]) };
+
+  const sharedStreamsPromise = androidTvFastResponse ? sharedFastPromise : sharedFullPromise;
+  const liveStreamsPromise = liveBuild.fullPromise;
+  const [sharedStreams, liveStreams] = await Promise.all([sharedStreamsPromise, liveStreamsPromise]);
+  return qualitySortFromStreams([...sharedStreams, ...liveStreams], qualityBand);
+}
+
 async function getStreams(type, id, options = {}) {
   const scope = options.scope || "main";
   const entries = providerEntriesForScope(scope);
@@ -1732,7 +1866,15 @@ async function getStreams(type, id, options = {}) {
   }
   const group = addonGroups[scope] || {};
   const qualityBand = options.qualityBand || group.qualityBand || "";
-  const useFastResponse = !qualityBand && !group.waitForFull;
+
+  if (qualityBand) {
+    return getQualityBandStreams(type, id, entries, qualityBand, {
+      requestHeaders: options.requestHeaders || {}
+    });
+  }
+
+  const hasTorbox = entriesHaveProvider(entries, "torbox");
+  const useFastResponse = !group.waitForFull && !hasTorbox;
   const cacheStreamsForScope = useFastResponse
     && !entries.some((provider) => provider.id === "aiostreams" || provider.id === "torbox");
 
@@ -1751,74 +1893,22 @@ async function getStreams(type, id, options = {}) {
     return useFastResponse ? inFlight.fastPromise : inFlight.fullPromise;
   }
 
-  const buildStatePromise = startStreamBuild(type, id, entries, {
+  const build = finalizedBuild(type, id, entries, {
     requestHeaders: options.requestHeaders || {}
+  }, {
+    cacheKey: key
   });
-  const fullPromise = buildStatePromise
-    .then(async (state) => {
-      if (!state) {
-        return [];
-      }
-      await state.donePromise;
-      return finalizeStreams(state.results, {
-        logFailures: true,
-        mediaInfo: state.mediaInfo,
-        parsed: state.parsed,
-        providerEntries: entries,
-        probeOnlyRequired: true,
-        qualityBand
-      });
-    })
+  const fullPromise = build.fullPromise
     .then((streams) => {
       if (cacheStreamsForScope) {
         rememberStreams(key, streams);
       }
       return streams;
     })
-    .catch((error) => {
-      console.error(`[Stream build] ${key}: ${error.message || error}`);
-      return [];
-    })
     .finally(() => {
       streamInflight.delete(key);
     });
-
-  const fastPromise = buildStatePromise
-    .then(async (state) => {
-      if (!state) {
-        return [];
-      }
-
-      await Promise.race([
-        state.donePromise,
-        delay(Math.max(0, STREAM_FAST_PROVIDER_WAIT_MS))
-      ]);
-
-      const providerResults = state.results.filter(Boolean);
-      const fastProbeTimeoutMs = entries.some((provider) => provider.id.startsWith("flix_streams_"))
-        ? STREAM_PROBE_TIMEOUT_MS
-        : STREAM_FAST_PROBE_TIMEOUT_MS;
-      const streams = await finalizeStreams(providerResults, {
-        logFailures: false,
-        mediaInfo: state.mediaInfo,
-        parsed: state.parsed,
-        providerEntries: entries,
-        probeOnlyRequired: true,
-        probeTimeoutMs: fastProbeTimeoutMs,
-        qualityBand
-      });
-
-      if (streams.length > 0) {
-        console.log(`[Stream fast] Returning ${streams.length} early streams for ${key}`);
-        return streams;
-      }
-
-      return fullPromise;
-    })
-    .catch((error) => {
-      console.error(`[Stream fast] ${key}: ${error.message || error}`);
-      return fullPromise;
-    });
+  const fastPromise = build.fastPromise;
 
   streamInflight.set(key, { fullPromise, fastPromise });
   return useFastResponse ? Promise.race([fullPromise, fastPromise]) : fullPromise;
