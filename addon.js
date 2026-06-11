@@ -636,6 +636,47 @@ function streamRequestHeaders(stream) {
   return normalizeHeaders(proxyHeaders) || {};
 }
 
+function decodeHeaderValue(value) {
+  try {
+    return decodeURIComponent(String(value || ""));
+  } catch {
+    return String(value || "");
+  }
+}
+
+function contentDispositionFilename(response) {
+  if (!response || !response.headers || typeof response.headers.get !== "function") {
+    return "";
+  }
+
+  const header = response.headers.get("content-disposition") || "";
+  if (!header) {
+    return "";
+  }
+
+  const encodedMatch = header.match(/filename\*\s*=\s*(?:UTF-8''|utf-8'')?([^;]+)/i);
+  if (encodedMatch) {
+    return decodeHeaderValue(encodedMatch[1].trim().replace(/^"|"$/g, ""));
+  }
+
+  const plainMatch = header.match(/filename\s*=\s*("[^"]+"|[^;]+)/i);
+  return plainMatch ? plainMatch[1].trim().replace(/^"|"$/g, "") : "";
+}
+
+function responseFilenameMatchesRequestedMedia(response, stream, mediaInfo, parsed) {
+  const filename = contentDispositionFilename(response);
+  if (!filename) {
+    return true;
+  }
+
+  return matchesRequestedMedia({
+    name: stream && stream.name,
+    title: filename,
+    description: filename,
+    behaviorHints: { filename }
+  }, mediaInfo, parsed);
+}
+
 async function responseSample(response) {
   if (!response.body || typeof response.body.getReader !== "function") {
     return { buffer: Buffer.alloc(0), text: "" };
@@ -687,6 +728,8 @@ async function probeStream(stream, options = {}) {
 
   const timeoutMs = options.timeoutMs || STREAM_PROBE_TIMEOUT_MS;
   const requireSeekable = streamRequiresProbe(stream);
+  const mediaInfo = options.mediaInfo;
+  const parsed = options.parsed;
   const headers = streamRequestHeaders(stream);
   const isHls = looksLikeHls(stream.url);
   const rangedHeaders = Object.assign({}, headers);
@@ -703,6 +746,10 @@ async function probeStream(stream, options = {}) {
     timeoutMs,
     `${stream.name} probe`
   );
+  if (!responseFilenameMatchesRequestedMedia(getResponse, stream, mediaInfo, parsed)) {
+    return { ok: false };
+  }
+
   const sample = await responseSample(getResponse);
   const getProbe = responseProbeResult(getResponse, stream.url, sample, { requireSeekable });
   if (getProbe.ok) {
@@ -737,6 +784,10 @@ async function probeStream(stream, options = {}) {
     timeoutMs,
     `${stream.name} head probe`
   );
+  if (!responseFilenameMatchesRequestedMedia(headResponse, stream, mediaInfo, parsed)) {
+    return { ok: false };
+  }
+
   return responseProbeResult(headResponse, stream.url, {}, { requireSeekable });
 }
 
@@ -760,7 +811,11 @@ async function filterPlayableStreams(streams, options = {}) {
           continue;
         }
 
-        const probe = await probeStream(stream, { timeoutMs: probeTimeoutMs });
+        const probe = await probeStream(stream, {
+          timeoutMs: probeTimeoutMs,
+          mediaInfo: options.mediaInfo,
+          parsed: options.parsed
+        });
         if (probe.ok) {
           filtered.push(stream);
         } else {
@@ -1685,6 +1740,8 @@ async function finalizeStreams(providerResults, options = {}) {
   const regularStreams = streams.filter((stream) => !isPassthroughStream(stream));
   const mediaMatchedStreams = filterRequestedMediaStreams(regularStreams, options.mediaInfo, options.parsed);
   const playableStreams = await filterPlayableStreams(dedupeStreams(mediaMatchedStreams), {
+    mediaInfo: options.mediaInfo,
+    parsed: options.parsed,
     probeOnlyRequired: options.probeOnlyRequired,
     probeTimeoutMs: options.probeTimeoutMs
   });
