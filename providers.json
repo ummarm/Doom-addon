@@ -1,6 +1,6 @@
 {
   "name": "Doom-addon",
-  "version": "2.1.7",
+  "version": "2.1.8",
   "scrapers": [
     {
       "id": "4khdhub",
@@ -594,7 +594,7 @@
       "id": "hindmoviez",
       "name": "HindMoviez",
       "description": "HindMoviez - Hindi and English Movies and Series",
-      "version": "1.0.5",
+      "version": "1.0.6",
       "author": "ummarm",
       "supportedTypes": [
         "movie",
@@ -871,7 +871,7 @@
       "id": "vidlink",
       "name": "VidLink",
       "description": "VidLink streams synced from D3adlyRocket/All-in-One-Nuvio, filtered to 1080p playable and seekable links",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "author": "ummarm",
       "supportedTypes": [
         "movie",
