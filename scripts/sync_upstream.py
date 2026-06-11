@@ -766,6 +766,13 @@ PROVIDERS = (
 )
 MURPH_WRAPPER_IDS = {"4khdhub_murph", "hdhub4u_murph", "moviebox_murph", "movies4u_murph"}
 PAUSED_UPSTREAM_PROVIDER_IDS = {"streamflix"}
+LOCAL_VARIANT_UPSTREAM_PATHS = {
+    # D3 does not publish a separate 4khdhub-tv provider file. Keep Doom-addon's
+    # local variant, but verify the upstream family file still exists each sync.
+    "4khdhubtv": "providers/4khdhub.js",
+    # MovieBox-Hindi is a Doom-addon variant layered on the D3 MovieBox family.
+    "movieboxhindi": "providers/moviebox.js",
+}
 
 
 def write_output(name: str, value: str) -> None:
@@ -1384,6 +1391,22 @@ def main() -> int:
                 raise
 
         if resolved_provider is None or upstream_text is None:
+            variant_path = LOCAL_VARIANT_UPSTREAM_PATHS.get(provider.scraper_id)
+            if variant_path:
+                try:
+                    fetch_text(f"{provider.upstream_raw_base}/{variant_path}")
+                    print(
+                        f"Info: `{provider.scraper_id}` is an intentional Doom-addon local variant "
+                        f"tracked against upstream `{variant_path}`."
+                    )
+                    continue
+                except Exception as exc:
+                    warning = (
+                        f"`{provider.scraper_id}` local variant could not verify upstream `{variant_path}`: {exc}"
+                    )
+                    sync_warnings.append(warning)
+                    print(f"Warning: {warning}")
+                    continue
             warning = f"`{provider.scraper_id}` was skipped because no compatible upstream provider file could be found automatically."
             sync_warnings.append(warning)
             print(f"Warning: {warning}")
