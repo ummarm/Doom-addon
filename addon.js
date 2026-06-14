@@ -14,7 +14,8 @@ const STREAM_FAST_PROVIDER_WAIT_MS = Number(process.env.STREAM_FAST_PROVIDER_WAI
 const STREAM_FAST_PROBE_TIMEOUT_MS = Number(process.env.STREAM_FAST_PROBE_TIMEOUT_MS || 2500);
 const MEDIAFUSION_PROBE_TIMEOUT_MS = Number(process.env.MEDIAFUSION_PROBE_TIMEOUT_MS || 8000);
 const QUALITY_SHARED_CACHE_SCOPE = "quality-shared";
-const STREAM_FIRST_BATCH_WAIT_MS = Number(process.env.STREAM_FIRST_BATCH_WAIT_MS || 16000);
+const STREAM_FIRST_BATCH_WAIT_MS = Number(process.env.STREAM_FIRST_BATCH_WAIT_MS || 20000);
+const STREAM_LIVE_FIRST_BATCH_WAIT_MS = Number(process.env.STREAM_LIVE_FIRST_BATCH_WAIT_MS || 12000);
 const QUALITY_TV_FAST_WAIT_MS = Number(process.env.QUALITY_TV_FAST_WAIT_MS || STREAM_FIRST_BATCH_WAIT_MS);
 const SHARED_PREWARM_SCOPES = new Set(["main", "quality-4k", "quality-1080", "quality-low"]);
 
@@ -159,11 +160,19 @@ function isPassthroughProvider(provider) {
   return Boolean(provider && passthroughProviderIds.has(provider.id));
 }
 
-function markPassthroughStream(stream) {
-  if (stream && typeof stream === "object") {
-    passthroughStreams.add(stream);
+function markPassthroughStream(stream, provider) {
+  if (!stream || typeof stream !== "object") {
+    return stream;
   }
-  return stream;
+
+  const behaviorHints = Object.assign({}, stream.behaviorHints || {});
+  if (provider && provider.id && !behaviorHints.doomProviderId) {
+    behaviorHints.doomProviderId = provider.id;
+  }
+
+  const markedStream = Object.assign({}, stream, { behaviorHints });
+  passthroughStreams.add(markedStream);
+  return markedStream;
 }
 
 function isPassthroughStream(stream) {
@@ -1622,10 +1631,11 @@ async function collectProviderStreams(provider, parsed, tmdbId, mediaInfo, reque
           }
           return true;
         });
-      return (await filterMediaFusionStreams(mediaFusionStreams)).map(markPassthroughStream);
+      return (await filterMediaFusionStreams(mediaFusionStreams))
+        .map((stream) => markPassthroughStream(stream, provider));
     }
 
-    return passthroughStreamsForProvider.map(markPassthroughStream);
+    return passthroughStreamsForProvider.map((stream) => markPassthroughStream(stream, provider));
   }
 
   return (Array.isArray(rawStreams) ? rawStreams : [])
@@ -1715,6 +1725,30 @@ function streamLanguageSortRank(stream) {
   return 4;
 }
 
+function streamSourceSortRank(stream) {
+  const behaviorHints = stream && stream.behaviorHints;
+  const providerId = String(behaviorHints && behaviorHints.doomProviderId || "").toLowerCase();
+  const text = [
+    providerId,
+    stream && stream.name,
+    stream && stream.title,
+    stream && stream.description,
+    stream && stream.url,
+    behaviorHints && behaviorHints.bingeGroup
+  ].filter(Boolean).join(" ").toLowerCase();
+
+  if (providerId === "torbox" || /\b(?:torbox|stremthru|torrentio|comet|meteor|aiostreams)\b/.test(text)) {
+    return 3;
+  }
+  if (providerId === "mediafusion") {
+    return 2;
+  }
+  if (isPassthroughStream(stream)) {
+    return 1;
+  }
+  return 0;
+}
+
 function sortStreams(streams, options = {}) {
   return streams.sort((a, b) => {
     const rankA = streamQualityRank(a);
@@ -1727,6 +1761,12 @@ function sortStreams(streams, options = {}) {
     const languageRankB = streamLanguageSortRank(b);
     if (languageRankA !== languageRankB) {
       return languageRankA - languageRankB;
+    }
+
+    const sourceRankA = streamSourceSortRank(a);
+    const sourceRankB = streamSourceSortRank(b);
+    if (sourceRankA !== sourceRankB) {
+      return sourceRankA - sourceRankB;
     }
 
     return compareStreamSizesAscending(a, b);
@@ -1952,7 +1992,7 @@ async function getQualityBandStreams(type, id, entries, qualityBand, requestCont
     ? finalizedBuild(type, id, liveEntries, requestContext, {
       cacheKey: streamCacheKey(type, id, `${QUALITY_SHARED_CACHE_SCOPE}:live`),
       fastProbeTimeoutMs: STREAM_FAST_PROBE_TIMEOUT_MS,
-      fastWaitMs: QUALITY_TV_FAST_WAIT_MS
+      fastWaitMs: STREAM_LIVE_FIRST_BATCH_WAIT_MS
     })
     : { fullPromise: Promise.resolve([]), fastPromise: Promise.resolve([]) };
 
@@ -1989,7 +2029,7 @@ async function getStreams(type, id, options = {}) {
       ? finalizedBuild(type, id, liveEntries, requestContext, {
         cacheKey: streamCacheKey(type, id, `${scope}:live`),
         fastProbeTimeoutMs: STREAM_FAST_PROBE_TIMEOUT_MS,
-        fastWaitMs: QUALITY_TV_FAST_WAIT_MS
+        fastWaitMs: STREAM_LIVE_FIRST_BATCH_WAIT_MS
       })
       : { fullPromise: Promise.resolve([]), fastPromise: Promise.resolve([]) };
     const sharedStreamsPromise = sharedBuild.firstBatchPromise || sharedBuild.fullPromise;
