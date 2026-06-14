@@ -1,6 +1,6 @@
 {
   "name": "Doom-addon",
-  "version": "2.2.4",
+  "version": "2.2.5",
   "scrapers": [
     {
       "id": "4khdhub",
@@ -594,7 +594,7 @@
       "id": "hindmoviez",
       "name": "HindMoviez",
       "description": "HindMoviez - Hindi and English Movies and Series",
-      "version": "1.0.6",
+      "version": "1.0.7",
       "author": "ummarm",
       "supportedTypes": [
         "movie",
