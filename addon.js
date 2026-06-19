@@ -710,6 +710,11 @@ async function responseSample(response) {
 }
 
 function streamRequiresProbe(stream) {
+  const providerId = String(stream && stream.behaviorHints && stream.behaviorHints.doomProviderId || "");
+  if (/\b(?:4khdhub|hdhub4u|hdhub)\b/i.test(providerId)) {
+    return true;
+  }
+
   return Boolean(stream.behaviorHints && [
     "4khdhubnew",
     "4khdhub_yoruix",
@@ -727,6 +732,8 @@ function streamRequiresProbe(stream) {
     "vidlink",
     "webstreamrmbg",
     "flix_streams_emby",
+    "flix_streams_hdhub4u",
+    "flix_streams_4khdhub",
     "flix_streams_lotusvault",
     "flix_streams_debridvault"
   ].includes(stream.behaviorHints.doomProviderId));
