@@ -1,6 +1,6 @@
 {
   "name": "Doom-addon",
-  "version": "2.2.9",
+  "version": "2.2.11",
   "scrapers": [
     {
       "id": "4khdhub",
@@ -493,6 +493,73 @@
         "m3u8"
       ],
       "logo": "https://flixnest.app/flix-streams/static/icon.png",
+      "contentLanguage": [
+        "en",
+        "hi"
+      ]
+    },
+    {
+      "id": "cinefreak",
+      "name": "CineFreak",
+      "description": "CineFreak streams synced from D3adlyRocket/All-in-One-Nuvio",
+      "version": "1.0.1",
+      "author": "piratezoro9",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/cinefreak.js",
+      "enabled": true,
+      "formats": [
+        "mkv",
+        "mp4"
+      ],
+      "logo": "https://i.postimg.cc/rpDB2284/cinefreak.png",
+      "contentLanguage": [
+        "en",
+        "hi"
+      ]
+    },
+    {
+      "id": "fibwatch",
+      "name": "FibWatch",
+      "description": "FibWatch streams synced from D3adlyRocket/All-in-One-Nuvio",
+      "version": "1.0.1",
+      "author": "Nuvio Team",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/fibwatch.js",
+      "enabled": true,
+      "formats": [
+        "mkv",
+        "m3u8"
+      ],
+      "logo": "https://i.postimg.cc/sfLR6dMm/fibwatch.png",
+      "contentLanguage": [
+        "en",
+        "hi"
+      ]
+    },
+    {
+      "id": "playimdb",
+      "name": "PlayIMDb",
+      "description": "PlayIMDb streams synced from D3adlyRocket/All-in-One-Nuvio",
+      "version": "2.0.1",
+      "author": "PirateZoro9",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/playimdb.js",
+      "enabled": true,
+      "formats": [
+        "mp4",
+        "mkv",
+        "m3u8"
+      ],
+      "logo": "https://i.postimg.cc/KzjPtYWY/imdb.png",
       "contentLanguage": [
         "en",
         "hi"
