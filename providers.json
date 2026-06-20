@@ -1,6 +1,6 @@
 {
   "name": "Doom-addon",
-  "version": "2.2.12",
+  "version": "2.2.13",
   "scrapers": [
     {
       "id": "4khdhub",
@@ -502,7 +502,7 @@
       "id": "cinefreak",
       "name": "CineFreak",
       "description": "CineFreak streams synced from D3adlyRocket/All-in-One-Nuvio",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "author": "piratezoro9",
       "supportedTypes": [
         "movie",
