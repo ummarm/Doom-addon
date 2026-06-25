@@ -1,6 +1,6 @@
 {
   "name": "Doom-addon",
-  "version": "2.2.15",
+  "version": "2.2.16",
   "scrapers": [
     {
       "id": "4khdhub",
@@ -846,7 +846,7 @@
       "id": "moviesdrive",
       "name": "MoviesDrive",
       "description": "MoviesDrive - Movies and TV shows with multiple streaming servers",
-      "version": "1.0.7",
+      "version": "1.0.8",
       "author": "ummarm",
       "supportedTypes": [
         "movie",
