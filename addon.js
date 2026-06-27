@@ -612,13 +612,40 @@ function contentRangeStart(response) {
   return Number.isFinite(start) ? start : -1;
 }
 
-function hardSeekOffset(stream) {
-  const size = streamSizeBytes(stream);
-  const minimumOffset = 1024 * 1024;
-  if (size > minimumOffset * 2) {
-    return Math.min(size - 4096, Math.max(minimumOffset, Math.floor(size * 0.35)));
+function responseContentSize(response) {
+  if (!response || !response.headers) {
+    return 0;
   }
-  return minimumOffset;
+  const contentRange = response.headers.get("content-range") || "";
+  const rangeMatch = contentRange.match(/\/(\d+)\s*$/);
+  if (rangeMatch) {
+    const total = Number(rangeMatch[1]);
+    if (Number.isFinite(total) && total > 0) {
+      return total;
+    }
+  }
+  const contentLength = Number(response.headers.get("content-length") || 0);
+  return response.status === 200 && Number.isFinite(contentLength) && contentLength > 0 ? contentLength : 0;
+}
+
+function streamProviderId(stream) {
+  return String(stream && stream.behaviorHints && stream.behaviorHints.doomProviderId || "");
+}
+
+function isHdhubProviderId(providerId) {
+  return /\b(?:4khdhub|hdhub4u|hdhub)\b/i.test(String(providerId || ""));
+}
+
+function hardSeekOffsets(stream, response) {
+  const size = Math.max(streamSizeBytes(stream), responseContentSize(response));
+  const minimumOffset = 1024 * 1024;
+  const sampleSize = 4096;
+  if (size > minimumOffset * 2) {
+    const ratios = isHdhubProviderId(streamProviderId(stream)) ? [0.35, 0.7] : [0.35];
+    const offsets = ratios.map((ratio) => Math.min(size - sampleSize, Math.max(minimumOffset, Math.floor(size * ratio))));
+    return Array.from(new Set(offsets));
+  }
+  return [minimumOffset];
 }
 
 function hardSeekProbeResult(response, url, sample = {}, offset = 0) {
@@ -710,8 +737,8 @@ async function responseSample(response) {
 }
 
 function streamRequiresProbe(stream) {
-  const providerId = String(stream && stream.behaviorHints && stream.behaviorHints.doomProviderId || "");
-  if (/\b(?:4khdhub|hdhub4u|hdhub)\b/i.test(providerId)) {
+  const providerId = streamProviderId(stream);
+  if (isHdhubProviderId(providerId)) {
     return true;
   }
 
@@ -778,19 +805,24 @@ async function probeStream(stream, options = {}) {
   const getProbe = responseProbeResult(getResponse, stream.url, sample, { requireSeekable });
   if (getProbe.ok) {
     if (requireSeekable && !isHls) {
-      const offset = hardSeekOffset(stream);
-      const seekHeaders = Object.assign({}, headers, { Range: `bytes=${offset}-${offset + 4095}` });
-      const seekResponse = await withTimeout(
-        fetch(stream.url, {
-          method: "GET",
-          headers: seekHeaders,
-          redirect: "follow"
-        }),
-        timeoutMs,
-        `${stream.name} seek probe`
-      );
-      const seekSample = await responseSample(seekResponse);
-      return hardSeekProbeResult(seekResponse, stream.url, seekSample, offset);
+      for (const offset of hardSeekOffsets(stream, getResponse)) {
+        const seekHeaders = Object.assign({}, headers, { Range: `bytes=${offset}-${offset + 4095}` });
+        const seekResponse = await withTimeout(
+          fetch(stream.url, {
+            method: "GET",
+            headers: seekHeaders,
+            redirect: "follow"
+          }),
+          timeoutMs,
+          `${stream.name} seek probe`
+        );
+        const seekSample = await responseSample(seekResponse);
+        const seekProbe = hardSeekProbeResult(seekResponse, stream.url, seekSample, offset);
+        if (!seekProbe.ok) {
+          return seekProbe;
+        }
+      }
+      return { ok: true };
     }
     return getProbe;
   }
