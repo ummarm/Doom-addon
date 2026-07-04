@@ -103,17 +103,17 @@ const addonGroups = {
     providerIds: ["aiostreams"]
   },
   "quality-4k": {
-    name: "Umbrella 4K",
+    name: "4K UHD",
     providerIds: providerEntries.map((provider) => provider.id),
     qualityBand: "4k"
   },
   "quality-1080": {
-    name: "Umbrella 1080",
+    name: "FHD",
     providerIds: providerEntries.map((provider) => provider.id),
     qualityBand: "1080"
   },
   "quality-low": {
-    name: "Umbrella Low",
+    name: "HD",
     providerIds: providerEntries.map((provider) => provider.id),
     qualityBand: "low"
   }
