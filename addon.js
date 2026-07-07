@@ -13,8 +13,6 @@ const STREAM_CACHE_MAX_ENTRIES = Number(process.env.STREAM_CACHE_MAX_ENTRIES || 
 const STREAM_FAST_PROVIDER_WAIT_MS = Number(process.env.STREAM_FAST_PROVIDER_WAIT_MS || 25000);
 const STREAM_FAST_PROBE_TIMEOUT_MS = Number(process.env.STREAM_FAST_PROBE_TIMEOUT_MS || 2500);
 const MEDIAFUSION_PROBE_TIMEOUT_MS = Number(process.env.MEDIAFUSION_PROBE_TIMEOUT_MS || 8000);
-const LIVE_SOURCE_TIMEOUT_MS = Number(process.env.LIVE_SOURCE_TIMEOUT_MS || 8000);
-const LIVE_SOURCE_CACHE_TTL_MS = Number(process.env.LIVE_SOURCE_CACHE_TTL_MS || 5 * 60 * 1000);
 const QUALITY_SHARED_CACHE_SCOPE = "quality-shared";
 const STREAM_FIRST_BATCH_WAIT_MS = Number(process.env.STREAM_FIRST_BATCH_WAIT_MS || 20000);
 const STREAM_LIVE_FIRST_BATCH_WAIT_MS = Number(process.env.STREAM_LIVE_FIRST_BATCH_WAIT_MS || 12000);
@@ -182,7 +180,6 @@ const liveManifest = Object.assign({}, manifest, {
 addonManifests.live = liveManifest;
 const streamCache = new Map();
 const streamInflight = new Map();
-const liveSourceCache = new Map();
 const passthroughProviderIds = new Set(["mediafusion", "aiostreams", "torbox"]);
 const passthroughStreams = new WeakSet();
 
@@ -227,109 +224,26 @@ function getLiveMeta(type, id) {
   return item ? { meta: liveMetaFull(item) } : null;
 }
 
-function decodeHtmlString(value) {
-  return String(value || "")
-    .replace(/\\\//g, "/")
-    .replace(/\\u0026/g, "&")
-    .replace(/&amp;/g, "&")
-    .replace(/&#x2F;/g, "/");
-}
-
-function directLiveUrlFromText(text) {
-  const matches = [
-    ...String(text || "").matchAll(/(?:streamUrl|rawSourceUrl)\s*=\s*["']([^"']+)["']/gi),
-    ...String(text || "").matchAll(/(?:source|src)\s*:\s*["']([^"']+\.(?:m3u8|mp4)(?:\?[^"']*)?)["']/gi)
-  ];
-  const direct = matches
-    .map((match) => decodeHtmlString(match[1]))
-    .find((value) => /\.(?:m3u8|mp4)(?:[?#]|$)/i.test(value));
-  return direct || "";
-}
-
-function isDrmLivePage(text, directUrl) {
-  return /clearKeys|drm\s*:|cenc\.mpd/i.test(String(text || ""))
-    || /\.mpd(?:[?#]|$)/i.test(String(directUrl || ""));
-}
-
-async function fetchLiveText(url) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), LIVE_SOURCE_TIMEOUT_MS);
-  try {
-    const response = await fetch(url, {
-      headers: {
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-      },
-      signal: controller.signal
-    });
-    if (!response.ok) {
-      return "";
-    }
-    return response.text();
-  } catch {
-    return "";
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-async function resolveLiveStream(stream) {
-  const now = Date.now();
-  const cached = liveSourceCache.get(stream.url);
-  if (cached && cached.expiresAt > now) {
-    return cached.value;
-  }
-
-  let value = null;
-  if (/\.(?:m3u8|mp4)(?:[?#]|$)/i.test(stream.url)) {
-    value = { url: stream.url, sourcePage: stream.url };
-  } else {
-    const text = await fetchLiveText(stream.url);
-    const directUrl = directLiveUrlFromText(text);
-    if (directUrl && !isDrmLivePage(text, directUrl)) {
-      value = { url: directUrl, sourcePage: stream.url };
-    }
-  }
-
-  liveSourceCache.set(stream.url, {
-    value,
-    expiresAt: now + LIVE_SOURCE_CACHE_TTL_MS
-  });
-  return value;
-}
-
-async function getLiveStreams(type, id) {
+function getLiveStreams(type, id) {
   const item = liveSourcesForType(type).find((source) => source.id === id);
   if (!item) {
     return [];
   }
 
-  const resolved = await Promise.all(
-    (item.streams || [])
-      .filter((stream) => stream && stream.url)
-      .map(async (stream) => ({ stream, direct: await resolveLiveStream(stream) }))
-  );
-
-  return resolved
-    .filter((entry) => entry.direct && entry.direct.url)
-    .map(({ stream, direct }) => ({
-      name: `Live | ${stream.name}`,
+  return (item.streams || [])
+    .filter((stream) => stream && stream.url)
+    .map((stream) => ({
+      name: `Live Web | ${stream.name}`,
       title: [
         stream.name,
         stream.server || "Server",
-        "Direct live"
+        "Browser/web player"
       ].filter(Boolean).join("\n"),
-      url: direct.url,
+      externalUrl: stream.url,
       behaviorHints: {
         bingeGroup: "live",
         live: true,
-        proxyHeaders: {
-          request: {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-            "Referer": direct.sourcePage,
-            "Origin": new URL(direct.sourcePage).origin
-          }
-        }
+        notWebReady: true
       }
     }));
 }
