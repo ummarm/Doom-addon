@@ -1,0 +1,37 @@
+{
+  "version": "1.0.0",
+  "sources": [
+    {
+      "id": "live:kickbd:fifa-world-cup-2026-round-of-16-1",
+      "type": "tv",
+      "name": "FIFA World Cup 2026 - Round of 16",
+      "description": "Public KickBD live provider list for FIFA World Cup 2026 Round of 16.",
+      "poster": "https://pub-3b1599daada84535989ad7d8f7f54bb1.r2.dev/match-sliders/01KWW47FF4KDKCMM7F3H0PC3A4.jpeg",
+      "background": "https://pub-3b1599daada84535989ad7d8f7f54bb1.r2.dev/match-sliders/01KWW47FF4KDKCMM7F3H0PC3A4.jpeg",
+      "streams": [
+        { "name": "Toffee 2", "server": "Server 1", "url": "https://vod.yagaverse.net/toffee2.php", "type": "iframe" },
+        { "name": "Caze TV - 1", "server": "Server 1", "url": "https://source.kickbd.org/source/stream_19", "type": "iframe" },
+        { "name": "D Sports - 1", "server": "Server 1", "url": "https://source.kickbd.org/source/stream_10", "type": "iframe" },
+        { "name": "Fox 4K [BDiX]", "server": "Server 1", "url": "https://vod.yagaverse.net/fox.php", "type": "iframe" },
+        { "name": "KickBD Edge", "server": "Server 1", "url": "https://vod.yagaverse.net/is-bdix.php", "type": "iframe" },
+        { "name": "WC-TV", "server": "Server 1", "url": "https://source.kickbd.org/source/stream_12", "type": "iframe" },
+        { "name": "Fox One -1 [ALT]", "server": "Server 1", "url": "https://source.kickbd.org/source/stream_25", "type": "iframe" },
+        { "name": "Fox One - 1", "server": "Server 1", "url": "https://source.kickbd.org/source/stream_14", "type": "iframe" },
+        { "name": "Kickbd Extreme - 1 [4K]", "server": "Server 1", "url": "https://source.kickbd.org/source/stream_23", "type": "iframe" },
+        { "name": "iOS Server 1", "server": "Server 1", "url": "https://vod.yagaverse.net/ios.php", "type": "iframe" },
+        { "name": "iOS Server 2", "server": "Server 1", "url": "https://source.kickbd.org/source/stream_31", "type": "iframe" },
+        { "name": "M6", "server": "Server 1", "url": "https://kickbd.org/source/m6_france_fhd", "type": "iframe" },
+        { "name": "TipiK FR FHD", "server": "Server 1", "url": "https://source.kickbd.org/source/stream_26", "type": "iframe" },
+        { "name": "TSN FHD - 1", "server": "Server 1", "url": "https://source.kickbd.org/source/stream_13", "type": "iframe" },
+        { "name": "VRT Sports FHD", "server": "Server 1", "url": "https://source.kickbd.org/source/stream_37", "type": "iframe" },
+        { "name": "TUDN", "server": "Server 1", "url": "https://source.kickbd.org/source/stream_36", "type": "iframe" },
+        { "name": "ITV FHD - 1", "server": "Server 1", "url": "https://source.kickbd.org/source/stream_24", "type": "iframe" },
+        { "name": "Match Football", "server": "Server 1", "url": "https://source.kickbd.org/source/stream_18", "type": "iframe" },
+        { "name": "SporTV BR HD", "server": "Server 1", "url": "https://source.kickbd.org/source/stream_22", "type": "iframe" },
+        { "name": "TVE La 1 FHD", "server": "Server 1", "url": "https://source.kickbd.org/source/stream_35", "type": "iframe" },
+        { "name": "Telemundo", "server": "Server 1", "url": "https://kickbd.org/source/telemundo", "type": "iframe" },
+        { "name": "TELEMUNDO USA", "server": "Server 1", "url": "https://kickbd.org/source/telemundo_usa", "type": "iframe" }
+      ]
+    }
+  ]
+}

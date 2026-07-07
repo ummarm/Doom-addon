@@ -21,6 +21,7 @@ const SHARED_PREWARM_SCOPES = new Set(["main", "quality-4k", "quality-1080", "qu
 
 const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "manifest.json"), "utf8"));
 const providerRegistry = JSON.parse(fs.readFileSync(path.join(ROOT, "providers.json"), "utf8"));
+const liveRegistry = JSON.parse(fs.readFileSync(path.join(ROOT, "live_sources.json"), "utf8"));
 
 const providerEntries = providerRegistry.scrapers
   .filter((provider) => provider.enabled)
@@ -142,10 +143,118 @@ const addonManifests = Object.fromEntries(
     })
   ])
 );
+const liveManifest = Object.assign({}, manifest, {
+  id: `${manifest.id}.live`,
+  name: "Live",
+  description: "Live public provider entries for Doom-addon. Shows live metadata/catalog items separately from movie and series streams.",
+  resources: [
+    {
+      name: "catalog",
+      types: ["tv"]
+    },
+    {
+      name: "meta",
+      types: ["tv"],
+      idPrefixes: ["live:"]
+    },
+    {
+      name: "stream",
+      types: ["tv"],
+      idPrefixes: ["live:"]
+    }
+  ],
+  types: ["tv"],
+  idPrefixes: ["live:"],
+  catalogs: [
+    {
+      type: "tv",
+      id: "live",
+      name: "Live"
+    }
+  ],
+  behaviorHints: Object.assign({}, manifest.behaviorHints || {}, {
+    configurable: false,
+    p2p: false
+  })
+});
+addonManifests.live = liveManifest;
 const streamCache = new Map();
 const streamInflight = new Map();
 const passthroughProviderIds = new Set(["mediafusion", "aiostreams", "torbox"]);
 const passthroughStreams = new WeakSet();
+
+function liveSourcesForType(type) {
+  return (liveRegistry.sources || []).filter((item) => item && item.type === type);
+}
+
+function liveMetaPreview(item) {
+  return {
+    id: item.id,
+    type: item.type,
+    name: item.name,
+    poster: item.poster || manifest.logo,
+    background: item.background || item.poster || manifest.logo,
+    logo: manifest.logo,
+    description: item.description || "",
+    genres: ["Live"],
+    releaseInfo: "Live"
+  };
+}
+
+function liveMetaFull(item) {
+  return Object.assign(liveMetaPreview(item), {
+    runtime: "Live",
+    behaviorHints: {
+      defaultVideoId: item.id
+    }
+  });
+}
+
+function getLiveCatalog(type, id) {
+  if (id !== "live") {
+    return null;
+  }
+  return {
+    metas: liveSourcesForType(type).map(liveMetaPreview)
+  };
+}
+
+function getLiveMeta(type, id) {
+  const item = liveSourcesForType(type).find((source) => source.id === id);
+  return item ? { meta: liveMetaFull(item) } : null;
+}
+
+function getLiveStreams(type, id) {
+  const item = liveSourcesForType(type).find((source) => source.id === id);
+  if (!item) {
+    return [];
+  }
+
+  return (item.streams || [])
+    .filter((stream) => stream && stream.url)
+    .map((stream) => ({
+      name: `Live | ${stream.name}`,
+      title: [
+        stream.name,
+        stream.server || "Server",
+        stream.type ? stream.type.toUpperCase() : ""
+      ].filter(Boolean).join("\n"),
+      externalUrl: stream.url,
+      behaviorHints: {
+        bingeGroup: "live",
+        live: true,
+        notWebReady: true
+      }
+    }));
+}
+
+function getCatalog(scope, type, id) {
+  return scope === "live" ? getLiveCatalog(type, id) : null;
+}
+
+function getMeta(scope, type, id) {
+  return scope === "live" ? getLiveMeta(type, id) : null;
+}
 
 function loadProvider(provider) {
   if (!provider.getStreams) {
@@ -2058,6 +2167,9 @@ async function getQualityBandStreams(type, id, entries, qualityBand, requestCont
 
 async function getStreams(type, id, options = {}) {
   const scope = options.scope || "main";
+  if (scope === "live") {
+    return getLiveStreams(type, id);
+  }
   const entries = providerEntriesForScope(scope);
   if (!entries) {
     return null;
@@ -2137,6 +2249,8 @@ module.exports = {
   manifest,
   addonManifests,
   addonGroups,
+  getCatalog,
+  getMeta,
   getStreams,
   scopeHasProvider,
   parseStremioId,

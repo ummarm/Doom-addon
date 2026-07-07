@@ -4,7 +4,7 @@ const http = require("http");
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
-const { manifest, addonManifests, getStreams, scopeHasProvider, parseStremioId } = require("./addon");
+const { manifest, addonManifests, getCatalog, getMeta, getStreams, scopeHasProvider, parseStremioId } = require("./addon");
 const aioStreamsProvider = require("./providers/aiostreams");
 
 const PORT = Number(process.env.PORT || 7000);
@@ -63,6 +63,32 @@ function parseStreamPath(pathname) {
 function parseAddonManifestPath(pathname) {
   const match = pathname.match(/^\/addons\/([^/]+)\/manifest\.json$/);
   return match ? decodeURIComponent(match[1]) : null;
+}
+
+function parseCatalogPath(pathname) {
+  const match = pathname.match(/^\/addons\/([^/]+)\/catalog\/([^/]+)\/([^/]+)\.json$/);
+  if (!match) {
+    return null;
+  }
+
+  return {
+    scope: decodeURIComponent(match[1]),
+    type: decodeURIComponent(match[2]),
+    id: decodeURIComponent(match[3])
+  };
+}
+
+function parseMetaPath(pathname) {
+  const match = pathname.match(/^\/addons\/([^/]+)\/meta\/([^/]+)\/(.+)\.json$/);
+  if (!match) {
+    return null;
+  }
+
+  return {
+    scope: decodeURIComponent(match[1]),
+    type: decodeURIComponent(match[2]),
+    id: decodeURIComponent(match[3])
+  };
 }
 
 function parseAioRedirectPath(pathname) {
@@ -290,9 +316,10 @@ const server = http.createServer(async (request, response) => {
           `Torbox: ${url.origin}/addons/torbox/manifest.json`,
           `Umbrella MF: ${url.origin}/addons/mediafusion/manifest.json`,
           `Umbrella AIO: ${url.origin}/addons/aiostreams/manifest.json`,
-          `Umbrella 4K: ${url.origin}/addons/quality-4k/manifest.json`,
-          `Umbrella 1080: ${url.origin}/addons/quality-1080/manifest.json`,
-          `Umbrella Low: ${url.origin}/addons/quality-low/manifest.json`,
+          `4K UHD: ${url.origin}/addons/quality-4k/manifest.json`,
+          `FHD: ${url.origin}/addons/quality-1080/manifest.json`,
+          `HD: ${url.origin}/addons/quality-low/manifest.json`,
+          `Live: ${url.origin}/addons/live/manifest.json`,
           ""
         ].join("\n")
       );
@@ -317,6 +344,28 @@ const server = http.createServer(async (request, response) => {
         return;
       }
       sendJson(response, 200, scopedManifest, 3600);
+      return;
+    }
+
+    const catalogRequest = parseCatalogPath(url.pathname);
+    if (catalogRequest) {
+      const catalog = getCatalog(catalogRequest.scope, catalogRequest.type, catalogRequest.id);
+      if (!catalog) {
+        sendJson(response, 404, { error: "Catalog not found" });
+        return;
+      }
+      sendJson(response, 200, catalog, 300);
+      return;
+    }
+
+    const metaRequest = parseMetaPath(url.pathname);
+    if (metaRequest) {
+      const meta = getMeta(metaRequest.scope, metaRequest.type, metaRequest.id);
+      if (!meta) {
+        sendJson(response, 404, { error: "Metadata not found" });
+        return;
+      }
+      sendJson(response, 200, meta, 300);
       return;
     }
 
