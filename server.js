@@ -66,7 +66,7 @@ function parseAddonManifestPath(pathname) {
 }
 
 function parseCatalogPath(pathname) {
-  const match = pathname.match(/^\/addons\/([^/]+)\/catalog\/([^/]+)\/([^/]+)\.json$/);
+  const match = pathname.match(/^\/addons\/([^/]+)\/catalog\/([^/]+)\/([^/]+)(?:\/(.+))?\.json$/);
   if (!match) {
     return null;
   }
@@ -74,7 +74,8 @@ function parseCatalogPath(pathname) {
   return {
     scope: decodeURIComponent(match[1]),
     type: decodeURIComponent(match[2]),
-    id: decodeURIComponent(match[3])
+    id: decodeURIComponent(match[3]),
+    extra: match[4] ? decodeURIComponent(match[4]) : ""
   };
 }
 
@@ -349,7 +350,7 @@ const server = http.createServer(async (request, response) => {
 
     const catalogRequest = parseCatalogPath(url.pathname);
     if (catalogRequest) {
-      const catalog = getCatalog(catalogRequest.scope, catalogRequest.type, catalogRequest.id);
+      const catalog = await getCatalog(catalogRequest.scope, catalogRequest.type, catalogRequest.id, catalogRequest.extra);
       if (!catalog) {
         sendJson(response, 404, { error: "Catalog not found" });
         return;
@@ -360,7 +361,7 @@ const server = http.createServer(async (request, response) => {
 
     const metaRequest = parseMetaPath(url.pathname);
     if (metaRequest) {
-      const meta = getMeta(metaRequest.scope, metaRequest.type, metaRequest.id);
+      const meta = await getMeta(metaRequest.scope, metaRequest.type, metaRequest.id);
       if (!meta) {
         sendJson(response, 404, { error: "Metadata not found" });
         return;

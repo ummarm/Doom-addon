@@ -21,7 +21,36 @@ const SHARED_PREWARM_SCOPES = new Set(["main", "quality-4k", "quality-1080", "qu
 
 const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "manifest.json"), "utf8"));
 const providerRegistry = JSON.parse(fs.readFileSync(path.join(ROOT, "providers.json"), "utf8"));
-const liveRegistry = JSON.parse(fs.readFileSync(path.join(ROOT, "live_sources.json"), "utf8"));
+const FLIXNEST_LIVE_BASE_URL = process.env.FLIXNEST_LIVE_BASE_URL || "https://flixnest.app/flix-streams/u/6p9xzp78nunz";
+const flixnestLiveCatalogs = [
+  {
+    extra: [
+      { isRequired: false, name: "skip" },
+      { isRequired: false, name: "search" }
+    ],
+    id: "live-tv-sports-top",
+    name: "Live TV / Sports - Top",
+    type: "tv"
+  },
+  {
+    extra: [
+      { isRequired: false, name: "skip" },
+      { isRequired: false, name: "search" }
+    ],
+    id: "live-tv-sports-dl-cat-fifa-world-cup-2026",
+    name: "Live TV / Sports - DL: fifa-world-cup-2026",
+    type: "tv"
+  },
+  {
+    extra: [
+      { isRequired: false, name: "skip" },
+      { isRequired: false, name: "search" }
+    ],
+    id: "live-tv-sports-dl-cat-cricket",
+    name: "Live TV / Sports - DL: cricket",
+    type: "tv"
+  }
+];
 
 const providerEntries = providerRegistry.scrapers
   .filter((provider) => provider.enabled)
@@ -146,32 +175,11 @@ const addonManifests = Object.fromEntries(
 const liveManifest = Object.assign({}, manifest, {
   id: `${manifest.id}.live`,
   name: "Live",
-  description: "Live public provider entries for Doom-addon. Shows live metadata/catalog items separately from movie and series streams.",
-  resources: [
-    {
-      name: "catalog",
-      types: ["tv"]
-    },
-    {
-      name: "meta",
-      types: ["tv"],
-      idPrefixes: ["live:"]
-    },
-    {
-      name: "stream",
-      types: ["tv"],
-      idPrefixes: ["live:"]
-    }
-  ],
+  description: "Live TV and sports from the configured Flixnest live manifest. This is separate from the Umbrella F movie/series provider group.",
+  resources: ["stream", "catalog", "meta"],
   types: ["tv"],
-  idPrefixes: ["live:"],
-  catalogs: [
-    {
-      type: "tv",
-      id: "live",
-      name: "Live"
-    }
-  ],
+  idPrefixes: ["streamsports99", "dlstreams", "strongvaulttv"],
+  catalogs: flixnestLiveCatalogs,
   behaviorHints: Object.assign({}, manifest.behaviorHints || {}, {
     configurable: false,
     p2p: false
@@ -183,73 +191,48 @@ const streamInflight = new Map();
 const passthroughProviderIds = new Set(["mediafusion", "aiostreams", "torbox"]);
 const passthroughStreams = new WeakSet();
 
-function liveSourcesForType(type) {
-  return (liveRegistry.sources || []).filter((item) => item && item.type === type);
+function upstreamLiveUrl(...segments) {
+  const path = segments
+    .filter((segment) => segment !== undefined && segment !== null && segment !== "")
+    .map((segment) => encodeURIComponent(String(segment)))
+    .join("/");
+  return `${FLIXNEST_LIVE_BASE_URL}/${path}.json`;
 }
 
-function liveMetaPreview(item) {
-  return {
-    id: item.id,
-    type: item.type,
-    name: item.name,
-    poster: item.poster || manifest.logo,
-    background: item.background || item.poster || manifest.logo,
-    logo: manifest.logo,
-    description: item.description || "",
-    genres: ["Live"],
-    releaseInfo: "Live"
-  };
-}
-
-function liveMetaFull(item) {
-  return Object.assign(liveMetaPreview(item), {
-    runtime: "Live",
-    behaviorHints: {
-      defaultVideoId: item.id
+async function fetchLiveJson(...segments) {
+  const response = await fetch(upstreamLiveUrl(...segments), {
+    headers: {
+      "Accept": "application/json",
+      "User-Agent": "Doom-addon/2.2"
     }
   });
-}
-
-function getLiveCatalog(type, id) {
-  if (id !== "live") {
+  if (!response.ok) {
     return null;
   }
-  return {
-    metas: liveSourcesForType(type).map(liveMetaPreview)
-  };
+  return response.json();
 }
 
-function getLiveMeta(type, id) {
-  const item = liveSourcesForType(type).find((source) => source.id === id);
-  return item ? { meta: liveMetaFull(item) } : null;
+async function getLiveCatalog(type, id, extra = "") {
+  if (!flixnestLiveCatalogs.some((catalog) => catalog.type === type && catalog.id === id)) {
+    return null;
+  }
+  return fetchLiveJson("catalog", type, id, extra);
 }
 
-function getLiveStreams(type, id) {
-  const item = liveSourcesForType(type).find((source) => source.id === id);
-  if (!item) {
+async function getLiveMeta(type, id) {
+  return fetchLiveJson("meta", type, id);
+}
+
+async function getLiveStreams(type, id) {
+  const payload = await fetchLiveJson("stream", type, id);
+  if (!payload || !Array.isArray(payload.streams)) {
     return [];
   }
-
-  return (item.streams || [])
-    .filter((stream) => stream && stream.url)
-    .map((stream) => ({
-      name: `Live Web | ${stream.name}`,
-      title: [
-        stream.name,
-        stream.server || "Server",
-        "Browser/web player"
-      ].filter(Boolean).join("\n"),
-      externalUrl: stream.url,
-      behaviorHints: {
-        bingeGroup: "live",
-        live: true,
-        notWebReady: true
-      }
-    }));
+  return payload.streams.filter((stream) => stream && stream.url);
 }
 
-function getCatalog(scope, type, id) {
-  return scope === "live" ? getLiveCatalog(type, id) : null;
+function getCatalog(scope, type, id, extra = "") {
+  return scope === "live" ? getLiveCatalog(type, id, extra) : null;
 }
 
 function getMeta(scope, type, id) {
