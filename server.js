@@ -380,7 +380,8 @@ const server = http.createServer(async (request, response) => {
         sendJson(response, 404, { error: "Add-on group not found" });
         return;
       }
-      const disableStreamCache = scopeHasProvider(streamRequest.scope, "aiostreams")
+      const disableStreamCache = streamRequest.scope === "live"
+        || scopeHasProvider(streamRequest.scope, "aiostreams")
         || scopeHasProvider(streamRequest.scope, "torbox");
       const cacheSeconds = disableStreamCache ? 0 : 300;
       const responseStreams = scopeHasProvider(streamRequest.scope, "aiostreams")

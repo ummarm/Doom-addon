@@ -17,6 +17,8 @@ const QUALITY_SHARED_CACHE_SCOPE = "quality-shared";
 const STREAM_FIRST_BATCH_WAIT_MS = Number(process.env.STREAM_FIRST_BATCH_WAIT_MS || 20000);
 const STREAM_LIVE_FIRST_BATCH_WAIT_MS = Number(process.env.STREAM_LIVE_FIRST_BATCH_WAIT_MS || 12000);
 const QUALITY_TV_FAST_WAIT_MS = Number(process.env.QUALITY_TV_FAST_WAIT_MS || STREAM_FIRST_BATCH_WAIT_MS);
+const LIVE_STREAM_REFRESH_MS = Number(process.env.LIVE_STREAM_REFRESH_MS || 35 * 60 * 1000);
+const LIVE_STREAM_CACHE_MAX_ENTRIES = Number(process.env.LIVE_STREAM_CACHE_MAX_ENTRIES || 250);
 const SHARED_PREWARM_SCOPES = new Set(["main", "quality-4k", "quality-1080", "quality-low"]);
 
 const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "manifest.json"), "utf8"));
@@ -176,10 +178,10 @@ const addonManifests = Object.fromEntries(
 const liveManifest = Object.assign({}, manifest, {
   id: `${manifest.id}.live`,
   name: "Live",
-  description: "Live TV and sports from the configured Flixnest live manifest. This is separate from the Umbrella F movie/series provider group.",
+  description: "DL-only live TV and sports from the configured Flixnest live manifest. Stream links refresh every 35 minutes.",
   resources: ["stream", "catalog", "meta"],
   types: ["tv"],
-  idPrefixes: ["streamsports99", "dlstreams", "strongvaulttv"],
+  idPrefixes: ["dlstreams"],
   catalogs: flixnestLiveCatalogs,
   behaviorHints: Object.assign({}, manifest.behaviorHints || {}, {
     configurable: false,
@@ -189,8 +191,40 @@ const liveManifest = Object.assign({}, manifest, {
 addonManifests.live = liveManifest;
 const streamCache = new Map();
 const streamInflight = new Map();
+const liveStreamCache = new Map();
 const passthroughProviderIds = new Set(["mediafusion", "aiostreams", "torbox"]);
 const passthroughStreams = new WeakSet();
+
+function isDlLiveId(id) {
+  return /^dlstreams:/i.test(String(id || ""));
+}
+
+function isDlLiveMeta(meta) {
+  return Boolean(meta && (
+    isDlLiveId(meta.id)
+    || (meta.behaviorHints && isDlLiveId(meta.behaviorHints.defaultVideoId))
+    || /\bDLStreams\b/i.test(`${meta.description || ""} ${meta.poster || ""} ${meta.background || ""}`)
+  ));
+}
+
+function filterDlLivePayload(payload) {
+  if (!payload || !Array.isArray(payload.metas)) {
+    return payload;
+  }
+  return Object.assign({}, payload, {
+    metas: payload.metas.filter(isDlLiveMeta)
+  });
+}
+
+function trimLiveStreamCache() {
+  while (liveStreamCache.size > LIVE_STREAM_CACHE_MAX_ENTRIES) {
+    const oldestKey = liveStreamCache.keys().next().value;
+    if (!oldestKey) {
+      return;
+    }
+    liveStreamCache.delete(oldestKey);
+  }
+}
 
 function upstreamLiveUrl(...segments) {
   const path = segments
@@ -217,19 +251,65 @@ async function getLiveCatalog(type, id, extra = "") {
   if (!flixnestLiveCatalogs.some((catalog) => catalog.type === type && catalog.id === id)) {
     return null;
   }
-  return fetchLiveJson("catalog", type, id, extra);
+  return filterDlLivePayload(await fetchLiveJson("catalog", type, id, extra));
 }
 
 async function getLiveMeta(type, id) {
+  if (!isDlLiveId(id)) {
+    return null;
+  }
   return fetchLiveJson("meta", type, id);
 }
 
-async function getLiveStreams(type, id) {
+async function fetchFreshLiveStreams(type, id) {
   const payload = await fetchLiveJson("stream", type, id);
   if (!payload || !Array.isArray(payload.streams)) {
     return [];
   }
   return payload.streams.filter((stream) => stream && stream.url);
+}
+
+async function refreshLiveStreamCacheEntry(cacheKey, entry) {
+  try {
+    const streams = await fetchFreshLiveStreams(entry.type, entry.id);
+    liveStreamCache.set(cacheKey, Object.assign({}, entry, {
+      fetchedAt: Date.now(),
+      streams
+    }));
+  } catch (error) {
+    console.error(`[Live] Failed to refresh ${entry.id}: ${error.message || error}`);
+  }
+}
+
+function refreshKnownLiveStreams() {
+  for (const [cacheKey, entry] of liveStreamCache.entries()) {
+    refreshLiveStreamCacheEntry(cacheKey, entry);
+  }
+}
+
+if (LIVE_STREAM_REFRESH_MS > 0) {
+  const liveRefreshTimer = setInterval(refreshKnownLiveStreams, LIVE_STREAM_REFRESH_MS);
+  if (typeof liveRefreshTimer.unref === "function") {
+    liveRefreshTimer.unref();
+  }
+}
+
+async function getLiveStreams(type, id) {
+  if (type !== "tv" || !isDlLiveId(id)) {
+    return [];
+  }
+
+  const cacheKey = `${type}:${id}`;
+  const cached = liveStreamCache.get(cacheKey);
+  const now = Date.now();
+  if (cached && now - cached.fetchedAt < LIVE_STREAM_REFRESH_MS) {
+    return cached.streams;
+  }
+
+  const streams = await fetchFreshLiveStreams(type, id);
+  liveStreamCache.set(cacheKey, { type, id, fetchedAt: now, streams });
+  trimLiveStreamCache();
+  return streams;
 }
 
 function getCatalog(scope, type, id, extra = "") {
