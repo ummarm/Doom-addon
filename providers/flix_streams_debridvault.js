@@ -13,22 +13,22 @@ function configuredBaseUrl() {
   return raw.replace(/\/manifest\.json$/i, "").replace(/\/+$/, "");
 }
 
-function streamId(tmdbId, mediaType, season, episode) {
-  const baseId = `tmdb:${tmdbId}`;
+function streamId(tmdbId, mediaType, season, episode, imdbId) {
+  const baseId = /^tt\d+$/i.test(String(imdbId || "")) ? imdbId : `tmdb:${tmdbId}`;
   if ((mediaType === "series" || mediaType === "tv") && season != null && episode != null) {
     return `${baseId}:${season}:${episode}`;
   }
   return baseId;
 }
 
-async function fetchFlixStreams(tmdbId, mediaType, season, episode) {
+async function fetchFlixStreams(tmdbId, mediaType, season, episode, imdbId) {
   const baseUrl = configuredBaseUrl();
   if (!baseUrl) {
     return [];
   }
 
   const stremioType = mediaType === "tv" ? "series" : mediaType;
-  const url = `${baseUrl}/stream/${encodeURIComponent(stremioType)}/${encodeURIComponent(streamId(tmdbId, stremioType, season, episode))}.json`;
+  const url = `${baseUrl}/stream/${encodeURIComponent(stremioType)}/${encodeURIComponent(streamId(tmdbId, stremioType, season, episode, imdbId))}.json`;
   const response = await fetchFlixJson(url);
   if (!response.ok) {
     throw new Error(`${PROVIDER_NAME} returned HTTP ${response.status}`);
@@ -61,18 +61,30 @@ async function fetchFlixJson(url) {
 }
 
 function isDebridVaultStream(stream) {
+  const flixStreams = stream && stream.metadata && stream.metadata.flixStreams;
   const text = [
     stream && stream.name,
     stream && stream.message,
     stream && stream.title,
     stream && stream.description,
     stream && stream.url,
+    stream && stream._fs_provider_name,
+    stream && stream._fs_provider_code,
+    stream && stream._fs_provider_id,
+    flixStreams && flixStreams.providerName,
+    flixStreams && flixStreams.providerCode,
+    flixStreams && flixStreams.providerId,
     stream && stream.behaviorHints && stream.behaviorHints.filename,
-    stream && stream.behaviorHints && stream.behaviorHints.bingeGroup
+    stream && stream.behaviorHints && stream.behaviorHints.bingeGroup,
+    stream && stream.behaviorHints && stream.behaviorHints.provider,
+    stream && stream.behaviorHints && stream.behaviorHints.providerCode,
+    stream && stream.behaviorHints && stream.behaviorHints.providerId,
+    stream && stream.behaviorHints && stream.behaviorHints.source
   ].filter(Boolean).join(" ");
 
   return /\bdebrid\s*vault\b/i.test(text)
     || /\bdebridvault\b/i.test(text)
+    || /\benable[-_]?debrid[-_]?vault\b/i.test(text)
     || /\/api\/debrid[-_]?vault\/media\b/i.test(text);
 }
 
@@ -94,9 +106,9 @@ function normalizeFlixStream(stream) {
   };
 }
 
-async function getStreams(tmdbId, mediaType = "movie", season = null, episode = null) {
+async function getStreams(tmdbId, mediaType = "movie", season = null, episode = null, imdbId = null) {
   try {
-    const streams = await fetchFlixStreams(tmdbId, mediaType, season, episode);
+    const streams = await fetchFlixStreams(tmdbId, mediaType, season, episode, imdbId);
     return streams.filter(isDebridVaultStream).map(normalizeFlixStream).filter(Boolean);
   } catch (error) {
     console.error(`[${PROVIDER_NAME}] ${error.message || error}`);

@@ -11,22 +11,22 @@ function configuredBaseUrl() {
   return raw.replace(/\/manifest\.json$/i, "").replace(/\/+$/, "");
 }
 
-function streamId(tmdbId, mediaType, season, episode) {
-  const baseId = `tmdb:${tmdbId}`;
+function streamId(tmdbId, mediaType, season, episode, imdbId) {
+  const baseId = /^tt\d+$/i.test(String(imdbId || "")) ? imdbId : `tmdb:${tmdbId}`;
   if ((mediaType === "series" || mediaType === "tv") && season != null && episode != null) {
     return `${baseId}:${season}:${episode}`;
   }
   return baseId;
 }
 
-async function fetchFlixStreams(tmdbId, mediaType, season, episode) {
+async function fetchFlixStreams(tmdbId, mediaType, season, episode, imdbId) {
   const baseUrl = configuredBaseUrl();
   if (!baseUrl) {
     return [];
   }
 
   const stremioType = mediaType === "tv" ? "series" : mediaType;
-  const url = `${baseUrl}/stream/${encodeURIComponent(stremioType)}/${encodeURIComponent(streamId(tmdbId, stremioType, season, episode))}.json`;
+  const url = `${baseUrl}/stream/${encodeURIComponent(stremioType)}/${encodeURIComponent(streamId(tmdbId, stremioType, season, episode, imdbId))}.json`;
   const response = await fetch(url, {
     headers: {
       "Accept": "application/json",
@@ -71,9 +71,9 @@ function normalizeFlixStream(stream) {
   };
 }
 
-async function getStreams(tmdbId, mediaType = "movie", season = null, episode = null) {
+async function getStreams(tmdbId, mediaType = "movie", season = null, episode = null, imdbId = null) {
   try {
-    const streams = await fetchFlixStreams(tmdbId, mediaType, season, episode);
+    const streams = await fetchFlixStreams(tmdbId, mediaType, season, episode, imdbId);
     return streams.filter(isArchiveVaultStream).map(normalizeFlixStream).filter(Boolean);
   } catch (error) {
     console.error(`[${PROVIDER_NAME}] ${error.message || error}`);
