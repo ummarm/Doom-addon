@@ -43,14 +43,25 @@ async function fetchFlixStreams(tmdbId, mediaType, season, episode, imdbId) {
 }
 
 function flixText(stream) {
+  const flixStreams = stream && stream.metadata && stream.metadata.flixStreams;
   return [
     stream && stream.name,
     stream && stream.message,
     stream && stream.title,
     stream && stream.description,
     stream && stream.url,
+    stream && stream._fs_provider_name,
+    stream && stream._fs_provider_code,
+    stream && stream._fs_provider_id,
+    flixStreams && flixStreams.providerName,
+    flixStreams && flixStreams.providerCode,
+    flixStreams && flixStreams.providerId,
     stream && stream.behaviorHints && stream.behaviorHints.filename,
-    stream && stream.behaviorHints && stream.behaviorHints.bingeGroup
+    stream && stream.behaviorHints && stream.behaviorHints.bingeGroup,
+    stream && stream.behaviorHints && stream.behaviorHints.provider,
+    stream && stream.behaviorHints && stream.behaviorHints.providerCode,
+    stream && stream.behaviorHints && stream.behaviorHints.providerId,
+    stream && stream.behaviorHints && stream.behaviorHints.source
   ].filter(Boolean).join(" ");
 }
 
@@ -67,6 +78,9 @@ function isKnownNamedFlixStream(stream) {
     || /\bvega\s*movies?\b/i.test(text)
     || /\bdebrid\s*vault\b/i.test(text)
     || /\bdebridvault\b/i.test(text)
+    || /\b(?:signal\s*vault|signalvault)\b/i.test(text)
+    || /\benable[-_]?telegram\b/i.test(text)
+    || /\/api\/telegram\/media\b/i.test(text)
     || /\/api\/debrid[-_]?vault\/media\b/i.test(text)
     || /\b(?:4khdhub|hdhub4u|hubdrive|hubcloud)\b/i.test(text)
     || /\/api\/(?:4khdhub|hdhub4u)\/media\b/i.test(text);

@@ -110,6 +110,7 @@ const addonGroups = {
       "flix_streams_uhdmovies",
       "flix_streams_4khdhub",
       "flix_streams_hdhub4u",
+      "flix_streams_signalvault",
       "flix_streams_debridvault",
       "flix_streams_other",
       "flix_streams_vegamovies"
@@ -854,6 +855,7 @@ function streamRequiresProbe(stream) {
     "flix_streams_hdhub4u",
     "flix_streams_4khdhub",
     "flix_streams_lotusvault",
+    "flix_streams_signalvault",
     "flix_streams_debridvault"
   ].includes(stream.behaviorHints.doomProviderId));
 }
@@ -999,6 +1001,7 @@ const UMBRELLA_PROVIDER_CODES = {
   "flix_streams_uhdmovies": "UHD",
   "flix_streams_4khdhub": "4KHH F",
   "flix_streams_hdhub4u": "HDHU F",
+  "flix_streams_signalvault": "SV F",
   "flix_streams_debridvault": "DBV F",
   "flix_streams_other": "FLX",
   "flix_streams_vegamovies": "VG",
@@ -1047,6 +1050,7 @@ const SOURCE_DETAIL_NAMES = {
   "flix_streams_uhdmovies": "Darth Vader",
   "flix_streams_4khdhub": "Darth Vader",
   "flix_streams_hdhub4u": "Darth Vader",
+  "flix_streams_signalvault": "Darth Vader",
   "flix_streams_debridvault": "Darth Vader",
   "flix_streams_other": "Darth Vader",
   "flix_streams_vegamovies": "Darth Vader",
@@ -1736,6 +1740,7 @@ function enrichTrustedProviderStream(rawStream, provider, mediaInfo) {
     "flix_streams_uhdmovies",
     "flix_streams_4khdhub",
     "flix_streams_hdhub4u",
+    "flix_streams_signalvault",
     "flix_streams_debridvault",
     "flix_streams_other",
     "playimdb",

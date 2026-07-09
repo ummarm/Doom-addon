@@ -1,6 +1,6 @@
 {
   "name": "Doom-addon",
-  "version": "2.2.29",
+  "version": "2.2.30",
   "scrapers": [
     {
       "id": "4khdhub",
@@ -440,6 +440,29 @@
         "tv"
       ],
       "filename": "providers/flix_streams_debridvault.js",
+      "enabled": true,
+      "formats": [
+        "mp4",
+        "mkv",
+        "m3u8"
+      ],
+      "logo": "https://flixnest.app/flix-streams/static/icon.png",
+      "contentLanguage": [
+        "en",
+        "hi"
+      ]
+    },
+    {
+      "id": "flix_streams_signalvault",
+      "name": "Flix-Streams Signal Vault",
+      "description": "Signal Vault results wrapped from the configured Flix-Streams add-on",
+      "version": "1.0.0",
+      "author": "ummarm",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/flix_streams_signalvault.js",
       "enabled": true,
       "formats": [
         "mp4",

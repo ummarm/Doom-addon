@@ -1,7 +1,9 @@
 "use strict";
 
-const PROVIDER_NAME = "Flix-Streams HDHub4u";
+const PROVIDER_NAME = "Flix-Streams Signal Vault";
 const DEFAULT_MANIFEST_URL = "https://flixnest.app/flix-streams/u/6p9xzp78nunz/manifest.json";
+const RETRY_STATUSES = new Set([429, 500, 502, 503, 504]);
+const RETRY_DELAYS_MS = [500, 1500];
 
 function configuredBaseUrl() {
   const raw = process.env.FLIX_STREAMS_MANIFEST_URL || process.env.FLIX_STREAMS_BASE_URL || DEFAULT_MANIFEST_URL;
@@ -27,13 +29,7 @@ async function fetchFlixStreams(tmdbId, mediaType, season, episode, imdbId) {
 
   const stremioType = mediaType === "tv" ? "series" : mediaType;
   const url = `${baseUrl}/stream/${encodeURIComponent(stremioType)}/${encodeURIComponent(streamId(tmdbId, stremioType, season, episode, imdbId))}.json`;
-  const response = await fetch(url, {
-    headers: {
-      "Accept": "application/json",
-      "User-Agent": "Doom-addon/1.0"
-    },
-    redirect: "follow"
-  });
+  const response = await fetchFlixJson(url);
   if (!response.ok) {
     throw new Error(`${PROVIDER_NAME} returned HTTP ${response.status}`);
   }
@@ -42,7 +38,29 @@ async function fetchFlixStreams(tmdbId, mediaType, season, episode, imdbId) {
   return Array.isArray(payload.streams) ? payload.streams : [];
 }
 
-function isHDHub4uStream(stream) {
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchFlixJson(url) {
+  let response;
+  for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt += 1) {
+    response = await fetch(url, {
+      headers: {
+        "Accept": "application/json",
+        "User-Agent": "Doom-addon/2.2"
+      },
+      redirect: "follow"
+    });
+    if (!RETRY_STATUSES.has(response.status) || attempt === RETRY_DELAYS_MS.length) {
+      return response;
+    }
+    await delay(RETRY_DELAYS_MS[attempt]);
+  }
+  return response;
+}
+
+function isSignalVaultStream(stream) {
   const flixStreams = stream && stream.metadata && stream.metadata.flixStreams;
   const text = [
     stream && stream.name,
@@ -64,10 +82,10 @@ function isHDHub4uStream(stream) {
     stream && stream.behaviorHints && stream.behaviorHints.source
   ].filter(Boolean).join(" ");
 
-  return /\bhd\s*hub\s*4u\b/i.test(text)
-    || /\bhdhub4u\b/i.test(text)
-    || /\benable[-_]?hdhub4u\b/i.test(text)
-    || /\/api\/hdhub4u\/media\b/i.test(text);
+  return /\bsignal\s*vault\b/i.test(text)
+    || /\bsignalvault\b/i.test(text)
+    || /\benable[-_]?telegram\b/i.test(text)
+    || /\/api\/telegram\/media\b/i.test(text);
 }
 
 function normalizeFlixStream(stream) {
@@ -91,7 +109,7 @@ function normalizeFlixStream(stream) {
 async function getStreams(tmdbId, mediaType = "movie", season = null, episode = null, imdbId = null) {
   try {
     const streams = await fetchFlixStreams(tmdbId, mediaType, season, episode, imdbId);
-    return streams.filter(isHDHub4uStream).map(normalizeFlixStream).filter(Boolean);
+    return streams.filter(isSignalVaultStream).map(normalizeFlixStream).filter(Boolean);
   } catch (error) {
     console.error(`[${PROVIDER_NAME}] ${error.message || error}`);
     return [];
