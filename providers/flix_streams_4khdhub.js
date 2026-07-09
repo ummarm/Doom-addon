@@ -43,17 +43,30 @@ async function fetchFlixStreams(tmdbId, mediaType, season, episode, imdbId) {
 }
 
 function is4KHDHubStream(stream) {
+  const flixStreams = stream && stream.metadata && stream.metadata.flixStreams;
   const text = [
     stream && stream.name,
     stream && stream.message,
     stream && stream.title,
     stream && stream.description,
     stream && stream.url,
-    stream && stream.behaviorHints && stream.behaviorHints.filename
+    stream && stream._fs_provider_name,
+    stream && stream._fs_provider_code,
+    stream && stream._fs_provider_id,
+    flixStreams && flixStreams.providerName,
+    flixStreams && flixStreams.providerCode,
+    flixStreams && flixStreams.providerId,
+    stream && stream.behaviorHints && stream.behaviorHints.filename,
+    stream && stream.behaviorHints && stream.behaviorHints.bingeGroup,
+    stream && stream.behaviorHints && stream.behaviorHints.provider,
+    stream && stream.behaviorHints && stream.behaviorHints.providerCode,
+    stream && stream.behaviorHints && stream.behaviorHints.providerId,
+    stream && stream.behaviorHints && stream.behaviorHints.source
   ].filter(Boolean).join(" ");
 
   return /\b4k\s*hd\s*hub\b/i.test(text)
     || /\b4khdhub\b/i.test(text)
+    || /\benable[-_]?4khdhub\b/i.test(text)
     || /\/api\/4khdhub\/media\b/i.test(text);
 }
 
