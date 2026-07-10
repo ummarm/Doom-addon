@@ -24,6 +24,7 @@ const SHARED_PREWARM_SCOPES = new Set(["main", "quality-4k", "quality-1080", "qu
 const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "manifest.json"), "utf8"));
 const providerRegistry = JSON.parse(fs.readFileSync(path.join(ROOT, "providers.json"), "utf8"));
 const FLIXNEST_LIVE_BASE_URL = process.env.FLIXNEST_LIVE_BASE_URL || "https://flixnest.app/flix-streams/u/6p9xzp78nunz";
+const SPORTSFREE_LIVE_BASE_URL = process.env.SPORTSFREE_LIVE_BASE_URL || "https://sportsfree.highfly.dev/eyJpbmNsdWRlU3BvcnRzIjpbImZvb3RiYWxsIiwiY3JpY2tldCJdfQ";
 const flixnestLiveCatalogs = [
   {
     extra: [
@@ -44,6 +45,41 @@ const flixnestLiveCatalogs = [
     type: "tv"
   }
 ];
+const sportsFreeLiveCatalogs = [
+  {
+    extra: [
+      { isRequired: false, name: "skip" }
+    ],
+    id: "sports_live",
+    name: "SportsFree - Live Now",
+    type: "sport"
+  },
+  {
+    extra: [
+      { isRequired: false, name: "skip" }
+    ],
+    id: "sports_today",
+    name: "SportsFree - Today",
+    type: "sport"
+  },
+  {
+    extra: [
+      { isRequired: false, name: "skip" }
+    ],
+    id: "sports_football",
+    name: "SportsFree - Football",
+    type: "sport"
+  },
+  {
+    extra: [
+      { isRequired: false, name: "skip" }
+    ],
+    id: "sports_cricket",
+    name: "SportsFree - Cricket",
+    type: "sport"
+  }
+];
+const liveCatalogs = [...flixnestLiveCatalogs, ...sportsFreeLiveCatalogs];
 
 const providerEntries = providerRegistry.scrapers
   .filter((provider) => provider.enabled)
@@ -169,11 +205,11 @@ const addonManifests = Object.fromEntries(
 const liveManifest = Object.assign({}, manifest, {
   id: `${manifest.id}.live`,
   name: "Live",
-  description: "DL-only live TV and sports from the configured Flixnest live manifest. Stream links refresh every 35 minutes.",
+  description: "DL live TV plus SportsFree football/cricket. Stream links refresh every 35 minutes.",
   resources: ["stream", "catalog", "meta"],
-  types: ["tv"],
-  idPrefixes: ["dlstreams"],
-  catalogs: flixnestLiveCatalogs,
+  types: ["tv", "sport"],
+  idPrefixes: ["dlstreams", "streamed", "sf", "recap", "leaf"],
+  catalogs: liveCatalogs,
   behaviorHints: Object.assign({}, manifest.behaviorHints || {}, {
     configurable: false,
     p2p: false
@@ -188,6 +224,14 @@ const passthroughStreams = new WeakSet();
 
 function isDlLiveId(id) {
   return /^dlstreams:/i.test(String(id || ""));
+}
+
+function isSportsFreeLiveId(id) {
+  return /^(?:streamed|sf|recap|leaf):/i.test(String(id || ""));
+}
+
+function isSportsFreeCatalog(type, id) {
+  return type === "sport" && sportsFreeLiveCatalogs.some((catalog) => catalog.id === id);
 }
 
 function isDlLiveMeta(meta) {
@@ -217,12 +261,39 @@ function trimLiveStreamCache() {
   }
 }
 
+function liveStreamText(stream) {
+  return [
+    stream && stream.name,
+    stream && stream.title,
+    stream && stream.description,
+    stream && stream.url,
+    stream && stream.behaviorHints && stream.behaviorHints.filename
+  ].filter(Boolean).join(" ");
+}
+
+function isPlayableLiveCandidate(stream) {
+  if (!stream || !stream.url || isBlockedNavigationUrl(stream.url)) {
+    return false;
+  }
+  const text = liveStreamText(stream);
+  return !/\b(?:upgrade|premium|subscribe|support|sale|discount)\b/i.test(text)
+    && !/^https?:\/\/(?:www\.)?google\./i.test(stream.url);
+}
+
 function upstreamLiveUrl(...segments) {
   const path = segments
     .filter((segment) => segment !== undefined && segment !== null && segment !== "")
     .map((segment) => encodeURIComponent(String(segment)))
     .join("/");
   return `${FLIXNEST_LIVE_BASE_URL}/${path}.json`;
+}
+
+function upstreamSportsFreeUrl(...segments) {
+  const path = segments
+    .filter((segment) => segment !== undefined && segment !== null && segment !== "")
+    .map((segment) => encodeURIComponent(String(segment)))
+    .join("/");
+  return `${SPORTSFREE_LIVE_BASE_URL}/${path}.json`;
 }
 
 async function fetchLiveJson(...segments) {
@@ -238,26 +309,47 @@ async function fetchLiveJson(...segments) {
   return response.json();
 }
 
-async function getLiveCatalog(type, id, extra = "") {
-  if (!flixnestLiveCatalogs.some((catalog) => catalog.type === type && catalog.id === id)) {
+async function fetchSportsFreeJson(...segments) {
+  const response = await fetch(upstreamSportsFreeUrl(...segments), {
+    headers: {
+      "Accept": "application/json",
+      "User-Agent": "Doom-addon/2.3"
+    }
+  });
+  if (!response.ok) {
     return null;
   }
-  return filterDlLivePayload(await fetchLiveJson("catalog", type, id, extra));
+  return response.json();
+}
+
+async function getLiveCatalog(type, id, extra = "") {
+  if (flixnestLiveCatalogs.some((catalog) => catalog.type === type && catalog.id === id)) {
+    return filterDlLivePayload(await fetchLiveJson("catalog", type, id, extra));
+  }
+  if (isSportsFreeCatalog(type, id)) {
+    return fetchSportsFreeJson("catalog", type, id, extra);
+  }
+  return null;
 }
 
 async function getLiveMeta(type, id) {
-  if (!isDlLiveId(id)) {
-    return null;
+  if (type === "tv" && isDlLiveId(id)) {
+    return fetchLiveJson("meta", type, id);
   }
-  return fetchLiveJson("meta", type, id);
+  if (type === "sport" && isSportsFreeLiveId(id)) {
+    return fetchSportsFreeJson("meta", type, id);
+  }
+  return null;
 }
 
 async function fetchFreshLiveStreams(type, id) {
-  const payload = await fetchLiveJson("stream", type, id);
+  const payload = type === "sport" && isSportsFreeLiveId(id)
+    ? await fetchSportsFreeJson("stream", type, id)
+    : await fetchLiveJson("stream", type, id);
   if (!payload || !Array.isArray(payload.streams)) {
     return [];
   }
-  return payload.streams.filter((stream) => stream && stream.url);
+  return payload.streams.filter(isPlayableLiveCandidate);
 }
 
 async function refreshLiveStreamCacheEntry(cacheKey, entry) {
@@ -286,7 +378,7 @@ if (LIVE_STREAM_REFRESH_MS > 0) {
 }
 
 async function getLiveStreams(type, id) {
-  if (type !== "tv" || !isDlLiveId(id)) {
+  if (!((type === "tv" && isDlLiveId(id)) || (type === "sport" && isSportsFreeLiveId(id)))) {
     return [];
   }
 
