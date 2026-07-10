@@ -43,14 +43,33 @@ async function fetchFlixStreams(tmdbId, mediaType, season, episode, imdbId) {
 }
 
 function isUhdMoviesStream(stream) {
-  const text = [
+  const flixStreams = stream && stream.metadata && stream.metadata.flixStreams;
+  const providerText = [
+    stream && stream._fs_provider_name,
+    stream && stream._fs_provider_code,
+    stream && stream._fs_provider_id,
+    flixStreams && flixStreams.providerName,
+    flixStreams && flixStreams.providerCode,
+    flixStreams && flixStreams.providerId,
+    stream && stream.behaviorHints && stream.behaviorHints.provider,
+    stream && stream.behaviorHints && stream.behaviorHints.providerCode,
+    stream && stream.behaviorHints && stream.behaviorHints.providerId,
+    stream && stream.behaviorHints && stream.behaviorHints.source
+  ].filter(Boolean).join(" ");
+  const contentText = [
     stream && stream.name,
     stream && stream.message,
     stream && stream.title,
-    stream && stream.description
+    stream && stream.description,
+    stream && stream.behaviorHints && stream.behaviorHints.filename
   ].filter(Boolean).join(" ");
 
-  return /\buhd\s*movies\b/i.test(text) || /\buhdmovies\b/i.test(text);
+  return /\buhd\s*movies?\b/i.test(providerText)
+    || /\buhdmovies?\b/i.test(providerText)
+    || /\benable[-_]?uhd[-_]?movies?\b/i.test(providerText)
+    || /\b(?:uhd|um)\b/i.test(providerText)
+    || /\buhd\s*movies?\b/i.test(contentText)
+    || /\buhdmovies?\b/i.test(contentText);
 }
 
 function normalizeFlixStream(stream) {

@@ -43,13 +43,33 @@ async function fetchFlixStreams(tmdbId, mediaType, season, episode, imdbId) {
 }
 
 function isVegaMoviesStream(stream) {
-  const text = [
+  const flixStreams = stream && stream.metadata && stream.metadata.flixStreams;
+  const providerText = [
+    stream && stream._fs_provider_name,
+    stream && stream._fs_provider_code,
+    stream && stream._fs_provider_id,
+    flixStreams && flixStreams.providerName,
+    flixStreams && flixStreams.providerCode,
+    flixStreams && flixStreams.providerId,
+    stream && stream.behaviorHints && stream.behaviorHints.provider,
+    stream && stream.behaviorHints && stream.behaviorHints.providerCode,
+    stream && stream.behaviorHints && stream.behaviorHints.providerId,
+    stream && stream.behaviorHints && stream.behaviorHints.source
+  ].filter(Boolean).join(" ");
+  const contentText = [
     stream && stream.name,
     stream && stream.message,
-    stream && stream.title
+    stream && stream.title,
+    stream && stream.description,
+    stream && stream.behaviorHints && stream.behaviorHints.filename
   ].filter(Boolean).join(" ");
 
-  return /\bvega\s*movies\b/i.test(text) || /\bvegamovies\b/i.test(text);
+  return /\bvega\s*movies?\b/i.test(providerText)
+    || /\bvegamovies?\b/i.test(providerText)
+    || /\benable[-_]?vega[-_]?movies?\b/i.test(providerText)
+    || /\bvg\b/i.test(providerText)
+    || /\bvega\s*movies?\b/i.test(contentText)
+    || /\bvegamovies?\b/i.test(contentText);
 }
 
 function normalizeFlixStream(stream) {

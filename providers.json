@@ -1,6 +1,6 @@
 {
   "name": "Doom-addon",
-  "version": "2.3.3",
+  "version": "2.3.4",
   "scrapers": [
     {
       "id": "4khdhub",
@@ -364,7 +364,7 @@
       "id": "flix_streams_uhdmovies",
       "name": "Flix-Streams UHDMovies",
       "description": "UHDMovies results wrapped from the configured Flix-Streams add-on",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "author": "ummarm",
       "supportedTypes": [
         "movie",
@@ -502,14 +502,14 @@
       "id": "flix_streams_vegamovies",
       "name": "Flix-Streams VegaMovies",
       "description": "VegaMovies results wrapped from the configured Flix-Streams add-on",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "author": "ummarm",
       "supportedTypes": [
         "movie",
         "tv"
       ],
       "filename": "providers/flix_streams_vegamovies.js",
-      "enabled": false,
+      "enabled": true,
       "formats": [
         "mp4",
         "mkv",

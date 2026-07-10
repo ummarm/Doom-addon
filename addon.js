@@ -1017,6 +1017,8 @@ function streamRequiresProbe(stream) {
     "flix_streams_emby",
     "flix_streams_hdhub4u",
     "flix_streams_4khdhub",
+    "flix_streams_uhdmovies",
+    "flix_streams_vegamovies",
     "flix_streams_lotusvault",
     "flix_streams_signalvault",
     "flix_streams_debridvault"
@@ -1906,6 +1908,7 @@ function enrichTrustedProviderStream(rawStream, provider, mediaInfo) {
     "flix_streams_signalvault",
     "flix_streams_debridvault",
     "flix_streams_other",
+    "flix_streams_vegamovies",
     "playimdb",
     "uhdmovies",
     "uhdmovies_yoruix"
