@@ -30,15 +30,6 @@ const flixnestLiveCatalogs = [
       { isRequired: false, name: "skip" },
       { isRequired: false, name: "search" }
     ],
-    id: "live-tv-sports-top",
-    name: "Live TV / Sports - Top",
-    type: "tv"
-  },
-  {
-    extra: [
-      { isRequired: false, name: "skip" },
-      { isRequired: false, name: "search" }
-    ],
     id: "live-tv-sports-dl-cat-fifa-world-cup-2026",
     name: "Live TV / Sports - DL: fifa-world-cup-2026",
     type: "tv"
