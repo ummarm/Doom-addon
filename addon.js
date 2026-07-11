@@ -23,39 +23,63 @@ const SHARED_PREWARM_SCOPES = new Set(["main", "quality-4k", "quality-1080", "qu
 
 const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "manifest.json"), "utf8"));
 const providerRegistry = JSON.parse(fs.readFileSync(path.join(ROOT, "providers.json"), "utf8"));
-const SPORTSFREE_LIVE_BASE_URL = process.env.SPORTSFREE_LIVE_BASE_URL || "https://sportsfree.highfly.dev/eyJpbmNsdWRlU3BvcnRzIjpbImZvb3RiYWxsIiwiY3JpY2tldCJdfQ";
+const SPORTS_LIVE_BASE_URL = process.env.SPORTS_LIVE_BASE_URL
+  || "https://sports.highfly.dev/eyJpbmNsdWRlU3BvcnRzIjpbImNyaWNrZXQiLCJmb290YmFsbCIsIm90aGVyIl19";
 const sportsFreeLiveCatalogs = [
   {
     extra: [
       { isRequired: false, name: "skip" }
     ],
     id: "sports_live",
-    name: "SportsFree - Live Now",
-    type: "sport"
+    name: "Live Now",
+    type: "sport",
+    behaviorHints: {
+      notForHome: true
+    }
   },
   {
     extra: [
       { isRequired: false, name: "skip" }
     ],
     id: "sports_today",
-    name: "SportsFree - Today",
-    type: "sport"
+    name: "Today",
+    type: "sport",
+    behaviorHints: {
+      notForHome: true
+    }
   },
   {
     extra: [
       { isRequired: false, name: "skip" }
     ],
     id: "sports_football",
-    name: "SportsFree - Football",
-    type: "sport"
+    name: "Football",
+    type: "sport",
+    behaviorHints: {
+      notForHome: true
+    }
   },
   {
     extra: [
       { isRequired: false, name: "skip" }
     ],
     id: "sports_cricket",
-    name: "SportsFree - Cricket",
-    type: "sport"
+    name: "Cricket",
+    type: "sport",
+    behaviorHints: {
+      notForHome: true
+    }
+  },
+  {
+    extra: [
+      { isRequired: false, name: "skip" }
+    ],
+    id: "sports_other",
+    name: "Other",
+    type: "sport",
+    behaviorHints: {
+      notForHome: true
+    }
   }
 ];
 const liveCatalogs = sportsFreeLiveCatalogs;
@@ -184,7 +208,7 @@ const addonManifests = Object.fromEntries(
 const liveManifest = Object.assign({}, manifest, {
   id: `${manifest.id}.live`,
   name: "Live",
-  description: "SportsFree football/cricket live streams. Stream links refresh every 35 minutes.",
+  description: "Sports football/cricket/other live streams. Stream links refresh every 35 minutes.",
   resources: ["stream", "catalog", "meta"],
   types: ["sport"],
   idPrefixes: ["streamed", "sf", "recap", "leaf"],
@@ -243,14 +267,14 @@ function upstreamSportsFreeUrl(...segments) {
     .filter((segment) => segment !== undefined && segment !== null && segment !== "")
     .map((segment) => encodeURIComponent(String(segment)))
     .join("/");
-  return `${SPORTSFREE_LIVE_BASE_URL}/${path}.json`;
+  return `${SPORTS_LIVE_BASE_URL}/${path}.json`;
 }
 
 async function fetchSportsFreeJson(...segments) {
   const response = await fetch(upstreamSportsFreeUrl(...segments), {
     headers: {
       "Accept": "application/json",
-      "User-Agent": "Doom-addon/2.3"
+      "User-Agent": "Doom-addon/2.3.6"
     }
   });
   if (!response.ok) {
