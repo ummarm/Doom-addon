@@ -26,6 +26,8 @@ const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "manifest.json"), "u
 const providerRegistry = JSON.parse(fs.readFileSync(path.join(ROOT, "providers.json"), "utf8"));
 const SPORTS_LIVE_BASE_URL = process.env.SPORTS_LIVE_BASE_URL
   || "https://sports.highfly.dev/eyJpbmNsdWRlU3BvcnRzIjpbImNyaWNrZXQiLCJmb290YmFsbCIsIm90aGVyIl19";
+const NUVIO_LIVE_BASE_URL = process.env.NUVIO_LIVE_BASE_URL
+  || "https://nuvio-live-sports.onrender.com/%7B%22sports%22%3A%22football%2Ccricket%22%7D";
 const sportsFreeLiveCatalogs = [
   {
     extra: [
@@ -83,7 +85,49 @@ const sportsFreeLiveCatalogs = [
     }
   }
 ];
-const liveCatalogs = sportsFreeLiveCatalogs;
+const nuvioLiveCatalogs = [
+  {
+    extra: [
+      { isRequired: false, name: "search" }
+    ],
+    id: "nuvio_sports_live",
+    name: "Nuvio - Live Now",
+    type: "tv"
+  },
+  {
+    extra: [
+      { isRequired: false, name: "search" }
+    ],
+    id: "nuvio_sports_football",
+    name: "Nuvio - Soccer",
+    type: "tv"
+  },
+  {
+    extra: [
+      { isRequired: false, name: "search" }
+    ],
+    id: "nuvio_sports_cricket",
+    name: "Nuvio - Cricket",
+    type: "tv"
+  },
+  {
+    extra: [
+      { isRequired: false, name: "search" }
+    ],
+    id: "nuvio_sports_networks",
+    name: "Nuvio - 24/7 Sports TV",
+    type: "tv"
+  },
+  {
+    extra: [
+      { isRequired: false, name: "search" }
+    ],
+    id: "nuvio_sports_upcoming",
+    name: "Nuvio - Upcoming",
+    type: "tv"
+  }
+];
+const liveCatalogs = [...sportsFreeLiveCatalogs, ...nuvioLiveCatalogs];
 
 const providerEntries = providerRegistry.scrapers
   .filter((provider) => provider.enabled)
@@ -209,10 +253,10 @@ const addonManifests = Object.fromEntries(
 const liveManifest = Object.assign({}, manifest, {
   id: `${manifest.id}.live`,
   name: "Live",
-  description: "Sports football/cricket/other live streams. Stream links refresh every 35 minutes.",
+  description: "Sports football/cricket/other live streams from HighFly and Nuvio. Stream links refresh every 35 minutes.",
   resources: ["stream", "catalog", "meta"],
-  types: ["sport"],
-  idPrefixes: ["streamed", "sf", "recap", "leaf"],
+  types: ["sport", "tv"],
+  idPrefixes: ["streamed", "sf", "recap", "leaf", "nuvio_sport_"],
   catalogs: liveCatalogs,
   behaviorHints: Object.assign({}, manifest.behaviorHints || {}, {
     configurable: false,
@@ -230,8 +274,16 @@ function isSportsFreeLiveId(id) {
   return /^(?:streamed|sf|recap|leaf):/i.test(String(id || ""));
 }
 
+function isNuvioLiveId(id) {
+  return /^nuvio_sport_/i.test(String(id || ""));
+}
+
 function isSportsFreeCatalog(type, id) {
   return type === "sport" && sportsFreeLiveCatalogs.some((catalog) => catalog.id === id);
+}
+
+function isNuvioLiveCatalog(type, id) {
+  return type === "tv" && nuvioLiveCatalogs.some((catalog) => catalog.id === id);
 }
 
 function trimLiveStreamCache() {
@@ -271,6 +323,14 @@ function upstreamSportsFreeUrl(...segments) {
   return `${SPORTS_LIVE_BASE_URL}/${path}.json`;
 }
 
+function upstreamNuvioLiveUrl(...segments) {
+  const path = segments
+    .filter((segment) => segment !== undefined && segment !== null && segment !== "")
+    .map((segment) => encodeURIComponent(String(segment)))
+    .join("/");
+  return `${NUVIO_LIVE_BASE_URL}/${path}.json`;
+}
+
 async function fetchSportsFreeJson(...segments) {
   const response = await fetch(upstreamSportsFreeUrl(...segments), {
     headers: {
@@ -284,9 +344,42 @@ async function fetchSportsFreeJson(...segments) {
   return response.json();
 }
 
+async function fetchNuvioLiveJson(...segments) {
+  const response = await fetch(upstreamNuvioLiveUrl(...segments), {
+    headers: {
+      "Accept": "application/json",
+      "User-Agent": "Doom-addon/2.3.9"
+    }
+  });
+  if (!response.ok) {
+    return null;
+  }
+  return response.json();
+}
+
+function normalizeNuvioLiveStream(stream) {
+  if (!stream || !stream.url) {
+    return stream;
+  }
+  if (/^https?:\/\//i.test(stream.url)) {
+    return stream;
+  }
+  if (String(stream.url).startsWith("/")) {
+    return Object.assign({}, stream, {
+      url: `${NUVIO_LIVE_BASE_URL}${stream.url}`
+    });
+  }
+  return Object.assign({}, stream, {
+    url: `${NUVIO_LIVE_BASE_URL}/${String(stream.url).replace(/^\.?\//, "")}`
+  });
+}
+
 async function getLiveCatalog(type, id, extra = "") {
   if (isSportsFreeCatalog(type, id)) {
     return fetchSportsFreeJson("catalog", type, id, extra);
+  }
+  if (isNuvioLiveCatalog(type, id)) {
+    return fetchNuvioLiveJson("catalog", type, id, extra);
   }
   return null;
 }
@@ -295,17 +388,25 @@ async function getLiveMeta(type, id) {
   if (type === "sport" && isSportsFreeLiveId(id)) {
     return fetchSportsFreeJson("meta", type, id);
   }
+  if (type === "tv" && isNuvioLiveId(id)) {
+    return fetchNuvioLiveJson("meta", type, id);
+  }
   return null;
 }
 
 async function fetchFreshLiveStreams(type, id) {
+  const isNuvio = type === "tv" && isNuvioLiveId(id);
   const payload = type === "sport" && isSportsFreeLiveId(id)
     ? await fetchSportsFreeJson("stream", type, id)
-    : null;
+    : isNuvio
+      ? await fetchNuvioLiveJson("stream", type, id)
+      : null;
   if (!payload || !Array.isArray(payload.streams)) {
     return [];
   }
-  return payload.streams.filter(isPlayableLiveCandidate);
+  return payload.streams
+    .map((stream) => isNuvio ? normalizeNuvioLiveStream(stream) : stream)
+    .filter(isPlayableLiveCandidate);
 }
 
 async function refreshLiveStreamCacheEntry(cacheKey, entry) {
@@ -337,7 +438,7 @@ if (LIVE_STREAM_REFRESH_MS > 0) {
 }
 
 async function getLiveStreams(type, id) {
-  if (!(type === "sport" && isSportsFreeLiveId(id))) {
+  if (!((type === "sport" && isSportsFreeLiveId(id)) || (type === "tv" && isNuvioLiveId(id)))) {
     return [];
   }
 
