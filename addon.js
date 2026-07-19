@@ -20,6 +20,8 @@ const QUALITY_TV_FAST_WAIT_MS = Number(process.env.QUALITY_TV_FAST_WAIT_MS || ST
 const LIVE_STREAM_REFRESH_MS = Number(process.env.LIVE_STREAM_REFRESH_MS || 35 * 60 * 1000);
 const LIVE_EMPTY_STREAM_RETRY_MS = Number(process.env.LIVE_EMPTY_STREAM_RETRY_MS || 60 * 1000);
 const LIVE_STREAM_CACHE_MAX_ENTRIES = Number(process.env.LIVE_STREAM_CACHE_MAX_ENTRIES || 250);
+const NUVIO_LIVE_PROBE_TIMEOUT_MS = Number(process.env.NUVIO_LIVE_PROBE_TIMEOUT_MS || 5000);
+const NUVIO_LIVE_PROBE_CONCURRENCY = Number(process.env.NUVIO_LIVE_PROBE_CONCURRENCY || 4);
 const SHARED_PREWARM_SCOPES = new Set(["main", "quality-4k", "quality-1080", "quality-low"]);
 
 const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "manifest.json"), "utf8"));
@@ -28,6 +30,7 @@ const SPORTS_LIVE_BASE_URL = process.env.SPORTS_LIVE_BASE_URL
   || "https://sports.highfly.dev/eyJpbmNsdWRlU3BvcnRzIjpbImNyaWNrZXQiLCJmb290YmFsbCIsIm90aGVyIl19";
 const NUVIO_LIVE_BASE_URL = process.env.NUVIO_LIVE_BASE_URL
   || "https://nuvio-live-sports.onrender.com/%7B%22sports%22%3A%22football%2Ccricket%22%7D";
+const NUVIO_LIVE_ORIGIN = new URL(NUVIO_LIVE_BASE_URL).origin;
 const sportsFreeLiveCatalogs = [
   {
     extra: [
@@ -348,7 +351,7 @@ async function fetchNuvioLiveJson(...segments) {
   const response = await fetch(upstreamNuvioLiveUrl(...segments), {
     headers: {
       "Accept": "application/json",
-      "User-Agent": "Doom-addon/2.3.9"
+      "User-Agent": "Doom-addon/2.3.10"
     }
   });
   if (!response.ok) {
@@ -366,12 +369,70 @@ function normalizeNuvioLiveStream(stream) {
   }
   if (String(stream.url).startsWith("/")) {
     return Object.assign({}, stream, {
-      url: `${NUVIO_LIVE_BASE_URL}${stream.url}`
+      url: `${NUVIO_LIVE_ORIGIN}${stream.url}`
     });
   }
   return Object.assign({}, stream, {
-    url: `${NUVIO_LIVE_BASE_URL}/${String(stream.url).replace(/^\.?\//, "")}`
+    url: `${NUVIO_LIVE_ORIGIN}/${String(stream.url).replace(/^\.?\//, "")}`
   });
+}
+
+function looksLikePlayableHlsPlaylist(text) {
+  const sample = String(text || "").slice(0, 4096);
+  return /^#EXTM3U/m.test(sample)
+    && /#EXT(?:-X-(?:STREAM-INF|MEDIA|TARGETDURATION|KEY|MAP|PART-INF)|INF)\b/m.test(sample)
+    && !/<(?:!doctype|html|body|script)\b/i.test(sample)
+    && !/\b(?:bad gateway|cloudflare|access denied|rate limit|too many requests|not found)\b/i.test(sample);
+}
+
+async function probeNuvioLiveStream(stream) {
+  if (!stream || !stream.url) {
+    return false;
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), NUVIO_LIVE_PROBE_TIMEOUT_MS);
+  try {
+    const response = await fetch(stream.url, {
+      method: "GET",
+      redirect: "follow",
+      signal: controller.signal,
+      headers: {
+        "Accept": "application/vnd.apple.mpegurl, application/x-mpegURL, */*",
+        "User-Agent": "Doom-addon/2.3.10"
+      }
+    });
+    if (!response.ok) {
+      return false;
+    }
+    const contentType = response.headers.get("content-type") || "";
+    const text = await response.text();
+    if (/text\/html/i.test(contentType) && !/^#EXTM3U/m.test(text)) {
+      return false;
+    }
+    return looksLikePlayableHlsPlaylist(text);
+  } catch (_) {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function filterNuvioLiveStreams(streams) {
+  const candidates = streams.filter(isPlayableLiveCandidate);
+  if (candidates.length === 0 || NUVIO_LIVE_PROBE_TIMEOUT_MS <= 0) {
+    return candidates;
+  }
+  const results = new Array(candidates.length).fill(false);
+  let nextIndex = 0;
+  const workerCount = Math.max(1, Math.min(NUVIO_LIVE_PROBE_CONCURRENCY, candidates.length));
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (nextIndex < candidates.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await probeNuvioLiveStream(candidates[index]);
+    }
+  }));
+  return candidates.filter((_, index) => results[index]);
 }
 
 async function getLiveCatalog(type, id, extra = "") {
@@ -404,9 +465,13 @@ async function fetchFreshLiveStreams(type, id) {
   if (!payload || !Array.isArray(payload.streams)) {
     return [];
   }
-  return payload.streams
+  const streams = payload.streams
     .map((stream) => isNuvio ? normalizeNuvioLiveStream(stream) : stream)
     .filter(isPlayableLiveCandidate);
+  if (isNuvio) {
+    return filterNuvioLiveStreams(streams);
+  }
+  return streams;
 }
 
 async function refreshLiveStreamCacheEntry(cacheKey, entry) {
