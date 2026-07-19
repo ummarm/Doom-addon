@@ -20,8 +20,10 @@ const QUALITY_TV_FAST_WAIT_MS = Number(process.env.QUALITY_TV_FAST_WAIT_MS || ST
 const LIVE_STREAM_REFRESH_MS = Number(process.env.LIVE_STREAM_REFRESH_MS || 35 * 60 * 1000);
 const LIVE_EMPTY_STREAM_RETRY_MS = Number(process.env.LIVE_EMPTY_STREAM_RETRY_MS || 60 * 1000);
 const LIVE_STREAM_CACHE_MAX_ENTRIES = Number(process.env.LIVE_STREAM_CACHE_MAX_ENTRIES || 250);
-const NUVIO_LIVE_PROBE_TIMEOUT_MS = Number(process.env.NUVIO_LIVE_PROBE_TIMEOUT_MS || 5000);
+const NUVIO_LIVE_PROBE_TIMEOUT_MS = Number(process.env.NUVIO_LIVE_PROBE_TIMEOUT_MS || 3000);
 const NUVIO_LIVE_PROBE_CONCURRENCY = Number(process.env.NUVIO_LIVE_PROBE_CONCURRENCY || 4);
+const NUVIO_LIVE_SEGMENT_PROBE_TIMEOUT_MS = Number(process.env.NUVIO_LIVE_SEGMENT_PROBE_TIMEOUT_MS || 3000);
+const NUVIO_LIVE_MAX_PROBE_CANDIDATES = Number(process.env.NUVIO_LIVE_MAX_PROBE_CANDIDATES || 20);
 const SHARED_PREWARM_SCOPES = new Set(["main", "quality-4k", "quality-1080", "quality-low"]);
 
 const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "manifest.json"), "utf8"));
@@ -351,7 +353,7 @@ async function fetchNuvioLiveJson(...segments) {
   const response = await fetch(upstreamNuvioLiveUrl(...segments), {
     headers: {
       "Accept": "application/json",
-      "User-Agent": "Doom-addon/2.3.10"
+      "User-Agent": "Doom-addon/2.3.11"
     }
   });
   if (!response.ok) {
@@ -385,31 +387,89 @@ function looksLikePlayableHlsPlaylist(text) {
     && !/\b(?:bad gateway|cloudflare|access denied|rate limit|too many requests|not found)\b/i.test(sample);
 }
 
-async function probeNuvioLiveStream(stream) {
+function isNuvioHlsCandidate(stream) {
   if (!stream || !stream.url) {
     return false;
   }
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), NUVIO_LIVE_PROBE_TIMEOUT_MS);
+  return /\.m3u8(?:[?#]|$)/i.test(stream.url)
+    || /\/api\/hls(?:[/?#]|$)/i.test(stream.url);
+}
+
+function firstHlsUriAfterTag(text, tagPattern) {
+  const lines = String(text || "").split(/\r?\n/);
+  for (let index = 0; index < lines.length; index += 1) {
+    if (!tagPattern.test(lines[index])) {
+      continue;
+    }
+    for (let next = index + 1; next < lines.length; next += 1) {
+      const line = lines[next].trim();
+      if (line && !line.startsWith("#")) {
+        return line;
+      }
+    }
+  }
+  return "";
+}
+
+function firstHlsSegmentUri(text) {
+  const explicitSegment = firstHlsUriAfterTag(text, /^#EXTINF\b/i);
+  if (explicitSegment) {
+    return explicitSegment;
+  }
+  const mapMatch = String(text || "").match(/^#EXT-X-MAP:.*URI="([^"]+)"/im);
+  return mapMatch ? mapMatch[1] : "";
+}
+
+function resolveHlsUri(baseUrl, uri) {
   try {
-    const response = await fetch(stream.url, {
+    return new URL(uri, baseUrl).toString();
+  } catch (_) {
+    return "";
+  }
+}
+
+async function fetchNuvioLiveText(url, timeoutMs, extraHeaders = {}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      redirect: "follow",
+      signal: controller.signal,
+      headers: Object.assign({
+        "Accept": "application/vnd.apple.mpegurl, application/x-mpegURL, */*",
+        "User-Agent": "Doom-addon/2.3.11"
+      }, extraHeaders)
+    });
+    const contentType = response.headers.get("content-type") || "";
+    const text = await response.text();
+    return { ok: response.ok, status: response.status, contentType, text };
+  } catch (_) {
+    return { ok: false, status: 0, contentType: "", text: "" };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function fetchNuvioSegment(url) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), NUVIO_LIVE_SEGMENT_PROBE_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, {
       method: "GET",
       redirect: "follow",
       signal: controller.signal,
       headers: {
-        "Accept": "application/vnd.apple.mpegurl, application/x-mpegURL, */*",
-        "User-Agent": "Doom-addon/2.3.10"
+        "Accept": "*/*",
+        "Range": "bytes=0-1",
+        "User-Agent": "Doom-addon/2.3.11"
       }
     });
-    if (!response.ok) {
-      return false;
-    }
     const contentType = response.headers.get("content-type") || "";
-    const text = await response.text();
-    if (/text\/html/i.test(contentType) && !/^#EXTM3U/m.test(text)) {
-      return false;
-    }
-    return looksLikePlayableHlsPlaylist(text);
+    return response.ok
+      && !/text\/html/i.test(contentType)
+      && !/application\/json/i.test(contentType)
+      && !/text\/plain/i.test(contentType);
   } catch (_) {
     return false;
   } finally {
@@ -417,8 +477,47 @@ async function probeNuvioLiveStream(stream) {
   }
 }
 
+async function probeNuvioLiveStream(stream) {
+  if (!isNuvioHlsCandidate(stream)) {
+    return false;
+  }
+  const playlist = await fetchNuvioLiveText(stream.url, NUVIO_LIVE_PROBE_TIMEOUT_MS);
+  if (!playlist.ok || !looksLikePlayableHlsPlaylist(playlist.text)) {
+    return false;
+  }
+  if (/text\/html/i.test(playlist.contentType) && !/^#EXTM3U/m.test(playlist.text)) {
+    return false;
+  }
+  let mediaPlaylistUrl = stream.url;
+  let mediaPlaylistText = playlist.text;
+  const variantUri = firstHlsUriAfterTag(playlist.text, /^#EXT-X-STREAM-INF\b/i);
+  if (variantUri) {
+    mediaPlaylistUrl = resolveHlsUri(stream.url, variantUri);
+    if (!mediaPlaylistUrl) {
+      return false;
+    }
+    const mediaPlaylist = await fetchNuvioLiveText(mediaPlaylistUrl, NUVIO_LIVE_PROBE_TIMEOUT_MS);
+    if (!mediaPlaylist.ok || !looksLikePlayableHlsPlaylist(mediaPlaylist.text)) {
+      return false;
+    }
+    mediaPlaylistText = mediaPlaylist.text;
+  }
+  const segmentUri = firstHlsSegmentUri(mediaPlaylistText);
+  if (!segmentUri) {
+    return false;
+  }
+  const segmentUrl = resolveHlsUri(mediaPlaylistUrl, segmentUri);
+  return segmentUrl ? fetchNuvioSegment(segmentUrl) : false;
+}
+
 async function filterNuvioLiveStreams(streams) {
-  const candidates = streams.filter(isPlayableLiveCandidate);
+  let candidates = streams
+    .filter(isPlayableLiveCandidate)
+    .filter(isNuvioHlsCandidate)
+    .sort((left, right) => Number(right.score || 0) - Number(left.score || 0));
+  if (NUVIO_LIVE_MAX_PROBE_CANDIDATES > 0) {
+    candidates = candidates.slice(0, NUVIO_LIVE_MAX_PROBE_CANDIDATES);
+  }
   if (candidates.length === 0 || NUVIO_LIVE_PROBE_TIMEOUT_MS <= 0) {
     return candidates;
   }
@@ -477,7 +576,8 @@ async function fetchFreshLiveStreams(type, id) {
 async function refreshLiveStreamCacheEntry(cacheKey, entry) {
   try {
     const streams = await fetchFreshLiveStreams(entry.type, entry.id);
-    if (streams.length === 0 && Array.isArray(entry.streams) && entry.streams.length > 0) {
+    const isNuvio = entry.type === "tv" && isNuvioLiveId(entry.id);
+    if (!isNuvio && streams.length === 0 && Array.isArray(entry.streams) && entry.streams.length > 0) {
       return;
     }
     liveStreamCache.set(cacheKey, Object.assign({}, entry, {
@@ -518,7 +618,8 @@ async function getLiveStreams(type, id) {
   }
 
   const streams = await fetchFreshLiveStreams(type, id);
-  if (streams.length === 0 && cached && Array.isArray(cached.streams) && cached.streams.length > 0) {
+  const isNuvio = type === "tv" && isNuvioLiveId(id);
+  if (!isNuvio && streams.length === 0 && cached && Array.isArray(cached.streams) && cached.streams.length > 0) {
     return cached.streams;
   }
   liveStreamCache.set(cacheKey, { type, id, fetchedAt: now, streams });
