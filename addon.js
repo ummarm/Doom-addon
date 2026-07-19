@@ -20,10 +20,11 @@ const QUALITY_TV_FAST_WAIT_MS = Number(process.env.QUALITY_TV_FAST_WAIT_MS || ST
 const LIVE_STREAM_REFRESH_MS = Number(process.env.LIVE_STREAM_REFRESH_MS || 35 * 60 * 1000);
 const LIVE_EMPTY_STREAM_RETRY_MS = Number(process.env.LIVE_EMPTY_STREAM_RETRY_MS || 60 * 1000);
 const LIVE_STREAM_CACHE_MAX_ENTRIES = Number(process.env.LIVE_STREAM_CACHE_MAX_ENTRIES || 250);
-const NUVIO_LIVE_PROBE_TIMEOUT_MS = Number(process.env.NUVIO_LIVE_PROBE_TIMEOUT_MS || 3000);
-const NUVIO_LIVE_PROBE_CONCURRENCY = Number(process.env.NUVIO_LIVE_PROBE_CONCURRENCY || 4);
+const NUVIO_LIVE_PROBE_TIMEOUT_MS = Number(process.env.NUVIO_LIVE_PROBE_TIMEOUT_MS || 2500);
+const NUVIO_LIVE_PROBE_CONCURRENCY = Number(process.env.NUVIO_LIVE_PROBE_CONCURRENCY || 10);
 const NUVIO_LIVE_SEGMENT_PROBE_TIMEOUT_MS = Number(process.env.NUVIO_LIVE_SEGMENT_PROBE_TIMEOUT_MS || 3000);
 const NUVIO_LIVE_MAX_PROBE_CANDIDATES = Number(process.env.NUVIO_LIVE_MAX_PROBE_CANDIDATES || 20);
+const NUVIO_LIVE_REQUIRE_SEGMENT_PROBE = /^(?:1|true|yes)$/i.test(process.env.NUVIO_LIVE_REQUIRE_SEGMENT_PROBE || "");
 const SHARED_PREWARM_SCOPES = new Set(["main", "quality-4k", "quality-1080", "quality-low"]);
 
 const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "manifest.json"), "utf8"));
@@ -121,14 +122,6 @@ const nuvioLiveCatalogs = [
     ],
     id: "nuvio_sports_networks",
     name: "Nuvio - 24/7 Sports TV",
-    type: "tv"
-  },
-  {
-    extra: [
-      { isRequired: false, name: "search" }
-    ],
-    id: "nuvio_sports_upcoming",
-    name: "Nuvio - Upcoming",
     type: "tv"
   }
 ];
@@ -353,7 +346,7 @@ async function fetchNuvioLiveJson(...segments) {
   const response = await fetch(upstreamNuvioLiveUrl(...segments), {
     headers: {
       "Accept": "application/json",
-      "User-Agent": "Doom-addon/2.3.11"
+      "User-Agent": "Doom-addon/2.3.12"
     }
   });
   if (!response.ok) {
@@ -438,7 +431,7 @@ async function fetchNuvioLiveText(url, timeoutMs, extraHeaders = {}) {
       signal: controller.signal,
       headers: Object.assign({
         "Accept": "application/vnd.apple.mpegurl, application/x-mpegURL, */*",
-        "User-Agent": "Doom-addon/2.3.11"
+        "User-Agent": "Doom-addon/2.3.12"
       }, extraHeaders)
     });
     const contentType = response.headers.get("content-type") || "";
@@ -462,7 +455,7 @@ async function fetchNuvioSegment(url) {
       headers: {
         "Accept": "*/*",
         "Range": "bytes=0-1",
-        "User-Agent": "Doom-addon/2.3.11"
+        "User-Agent": "Doom-addon/2.3.12"
       }
     });
     const contentType = response.headers.get("content-type") || "";
@@ -501,6 +494,9 @@ async function probeNuvioLiveStream(stream) {
       return false;
     }
     mediaPlaylistText = mediaPlaylist.text;
+  }
+  if (!NUVIO_LIVE_REQUIRE_SEGMENT_PROBE) {
+    return firstHlsSegmentUri(mediaPlaylistText) ? true : looksLikePlayableHlsPlaylist(mediaPlaylistText);
   }
   const segmentUri = firstHlsSegmentUri(mediaPlaylistText);
   if (!segmentUri) {
