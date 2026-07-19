@@ -18,6 +18,7 @@ const STREAM_FIRST_BATCH_WAIT_MS = Number(process.env.STREAM_FIRST_BATCH_WAIT_MS
 const STREAM_LIVE_FIRST_BATCH_WAIT_MS = Number(process.env.STREAM_LIVE_FIRST_BATCH_WAIT_MS || 12000);
 const QUALITY_TV_FAST_WAIT_MS = Number(process.env.QUALITY_TV_FAST_WAIT_MS || STREAM_FIRST_BATCH_WAIT_MS);
 const LIVE_STREAM_REFRESH_MS = Number(process.env.LIVE_STREAM_REFRESH_MS || 35 * 60 * 1000);
+const LIVE_EMPTY_STREAM_RETRY_MS = Number(process.env.LIVE_EMPTY_STREAM_RETRY_MS || 60 * 1000);
 const LIVE_STREAM_CACHE_MAX_ENTRIES = Number(process.env.LIVE_STREAM_CACHE_MAX_ENTRIES || 250);
 const SHARED_PREWARM_SCOPES = new Set(["main", "quality-4k", "quality-1080", "quality-low"]);
 
@@ -310,6 +311,9 @@ async function fetchFreshLiveStreams(type, id) {
 async function refreshLiveStreamCacheEntry(cacheKey, entry) {
   try {
     const streams = await fetchFreshLiveStreams(entry.type, entry.id);
+    if (streams.length === 0 && Array.isArray(entry.streams) && entry.streams.length > 0) {
+      return;
+    }
     liveStreamCache.set(cacheKey, Object.assign({}, entry, {
       fetchedAt: Date.now(),
       streams
@@ -340,11 +344,17 @@ async function getLiveStreams(type, id) {
   const cacheKey = `${type}:${id}`;
   const cached = liveStreamCache.get(cacheKey);
   const now = Date.now();
-  if (cached && now - cached.fetchedAt < LIVE_STREAM_REFRESH_MS) {
+  const cacheTtl = cached && Array.isArray(cached.streams) && cached.streams.length > 0
+    ? LIVE_STREAM_REFRESH_MS
+    : LIVE_EMPTY_STREAM_RETRY_MS;
+  if (cached && now - cached.fetchedAt < cacheTtl) {
     return cached.streams;
   }
 
   const streams = await fetchFreshLiveStreams(type, id);
+  if (streams.length === 0 && cached && Array.isArray(cached.streams) && cached.streams.length > 0) {
+    return cached.streams;
+  }
   liveStreamCache.set(cacheKey, { type, id, fetchedAt: now, streams });
   trimLiveStreamCache();
   return streams;
