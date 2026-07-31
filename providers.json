@@ -1,6 +1,6 @@
 {
   "name": "Doom-addon",
-  "version": "2.3.14",
+  "version": "2.3.15",
   "scrapers": [
     {
       "id": "4khdhub",
@@ -778,7 +778,7 @@
       "id": "4khdhubnew",
       "name": "4KHDHub-NEW",
       "description": "4KHDHub-NEW streams synced from D3adlyRocket/All-in-One-Nuvio",
-      "version": "2.0.2",
+      "version": "2.0.3",
       "author": "ummarm",
       "supportedTypes": [
         "movie",
