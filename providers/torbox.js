@@ -1,7 +1,7 @@
 "use strict";
 
 const PROVIDER_NAME = "Torbox";
-const DEFAULT_MANIFEST_URL = "https://aiostreams.fortheweak.cloud/stremio/0f2abcc3-6334-4dc1-8852-4f1f54ee0ede/eyJpIjoiQndmYWI3aEpnUVpRZWtpZzhxaWNqdz09IiwiZSI6ImkySnV3U1p6cEtYSzZQWS9keStNYTFXdHdHdzRGMHpNRGlYTUQwRUxCWXM9IiwidCI6ImEifQ/manifest.json";
+const DEFAULT_MANIFEST_URL = "https://aiostreams.fortheweak.cloud/stremio/0f2abcc3-6334-4dc1-8852-4f1f54ee0ede/eyJpIjoiT0xEakJYaklobC84NTJPeFlrdkNyZz09IiwiZSI6IjBlRjBuUXMwRmwrMldXbXYwYVlpODliQitlblBjUGVrN1VEd1Zsb3RBSUk9IiwidCI6ImEifQ/manifest.json";
 const BACKUP_MANIFEST_URL = "https://aiostreamsfortheweebsstable.midnightignite.me/stremio/4e02e39b-c022-4ce5-ad67-eeaca6b2fb5e/eyJpIjoid0k4WWxWZnQvaVhZNnkvTjZnN2sxUT09IiwiZSI6IlU4Z0tBYUp1WnQxaGJrQTgrT1FTS3Y0OWRmbG1wQVc1NzdLV1IzRGRBUWs9IiwidCI6ImEifQ/manifest.json";
 
 function normalizeBaseUrl(raw) {

@@ -172,13 +172,8 @@ function filterSeekableStreams(streams) {
   })).then(function(results) {
     var filtered = results.filter(function(item) { return item.ok; }).map(function(item) { return item.stream; });
     if (filtered.length === 0) {
-      filtered = results
-        .map(function(item) { return item.stream; })
-        .filter(looksLikeMurphFallbackCandidate);
-      if (filtered.length > 0) {
-        console.log(PROVIDER_TAG + " Seekable filter fallback kept " + filtered.length + "/" + streams.length + " streams");
-        return filtered;
-      }
+      console.log(PROVIDER_TAG + " Seekable filter kept 0/" + streams.length + " streams; dropping unseekable streams");
+      return [];
     }
     console.log(PROVIDER_TAG + " Seekable filter kept " + filtered.length + "/" + streams.length + " streams");
     return filtered;

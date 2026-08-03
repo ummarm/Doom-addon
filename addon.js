@@ -17,6 +17,8 @@ const QUALITY_SHARED_CACHE_SCOPE = "quality-shared";
 const STREAM_FIRST_BATCH_WAIT_MS = Number(process.env.STREAM_FIRST_BATCH_WAIT_MS || 20000);
 const STREAM_LIVE_FIRST_BATCH_WAIT_MS = Number(process.env.STREAM_LIVE_FIRST_BATCH_WAIT_MS || 12000);
 const QUALITY_TV_FAST_WAIT_MS = Number(process.env.QUALITY_TV_FAST_WAIT_MS || STREAM_FIRST_BATCH_WAIT_MS);
+const QUALITY_RESPONSE_WAIT_MS = Number(process.env.QUALITY_RESPONSE_WAIT_MS || STREAM_LIVE_FIRST_BATCH_WAIT_MS);
+const QUALITY_EMPTY_FALLBACK_WAIT_MS = Number(process.env.QUALITY_EMPTY_FALLBACK_WAIT_MS || 4000);
 const LIVE_STREAM_REFRESH_MS = Number(process.env.LIVE_STREAM_REFRESH_MS || 35 * 60 * 1000);
 const LIVE_EMPTY_STREAM_RETRY_MS = Number(process.env.LIVE_EMPTY_STREAM_RETRY_MS || 60 * 1000);
 const LIVE_STREAM_CACHE_MAX_ENTRIES = Number(process.env.LIVE_STREAM_CACHE_MAX_ENTRIES || 250);
@@ -1120,12 +1122,28 @@ function isHdhubProviderId(providerId) {
   return /\b(?:4khdhub|hdhub4u|hdhub)\b/i.test(String(providerId || ""));
 }
 
+function isHdhubStream(stream) {
+  const behaviorHints = stream && stream.behaviorHints;
+  const providerId = streamProviderId(stream);
+  const text = [
+    providerId,
+    stream && stream.name,
+    stream && stream.title,
+    stream && stream.description,
+    behaviorHints && behaviorHints.filename,
+    behaviorHints && behaviorHints.bingeGroup
+  ].filter(Boolean).join(" ");
+  return isHdhubProviderId(providerId)
+    || /\bHDHU(?:\s+[A-Z])?\b/i.test(text)
+    || /\bHDHub4u\b/i.test(text);
+}
+
 function hardSeekOffsets(stream, response) {
   const size = Math.max(streamSizeBytes(stream), responseContentSize(response));
   const minimumOffset = 1024 * 1024;
   const sampleSize = 4096;
   if (size > minimumOffset * 2) {
-    const ratios = isHdhubProviderId(streamProviderId(stream)) ? [0.35, 0.7] : [0.35];
+    const ratios = isHdhubStream(stream) ? [0.35, 0.7] : [0.35];
     const offsets = ratios.map((ratio) => Math.min(size - sampleSize, Math.max(minimumOffset, Math.floor(size * ratio))));
     return Array.from(new Set(offsets));
   }
@@ -1221,11 +1239,11 @@ async function responseSample(response) {
 }
 
 function streamRequiresProbe(stream) {
-  const providerId = streamProviderId(stream);
-  if (isHdhubProviderId(providerId)) {
+  if (isHdhubStream(stream)) {
     return true;
   }
 
+  const providerId = streamProviderId(stream);
   return Boolean(stream.behaviorHints && [
     "4khdhubnew",
     "4khdhub_yoruix",
@@ -2464,6 +2482,67 @@ function qualitySortFromStreams(streams, qualityBand) {
   return sortStreams(filterStreamsByQualityBand(streams.slice(), qualityBand), { qualityBand });
 }
 
+async function collectResolvedStreamsByDeadline(streamPromises, timeoutMs) {
+  const results = [];
+  const pending = streamPromises.map((promise, index) => Promise.resolve(promise)
+    .then((streams) => {
+      if (Array.isArray(streams)) {
+        results[index] = streams;
+      } else {
+        results[index] = [];
+      }
+    })
+    .catch((error) => {
+      console.error(`[Stream quality] Batch ${index + 1}: ${error.message || error}`);
+      results[index] = [];
+    }));
+
+  await Promise.race([
+    Promise.all(pending),
+    delay(Math.max(0, timeoutMs))
+  ]);
+
+  pending.forEach((promise) => promise.catch(() => {}));
+  return results.flatMap((streams) => streams || []);
+}
+
+async function collectFirstNonEmptyStreamsByDeadline(streamPromises, timeoutMs) {
+  return new Promise((resolve) => {
+    let settled = false;
+    let remaining = streamPromises.length;
+    const finish = (streams) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      resolve(Array.isArray(streams) ? streams : []);
+    };
+    const timer = setTimeout(() => finish([]), Math.max(0, timeoutMs));
+
+    streamPromises.forEach((promise, index) => {
+      Promise.resolve(promise)
+        .then((streams) => {
+          if (Array.isArray(streams) && streams.length > 0) {
+            finish(streams);
+            return;
+          }
+          remaining -= 1;
+          if (remaining === 0) {
+            finish([]);
+          }
+        })
+        .catch((error) => {
+          console.error(`[Stream quality] Full batch ${index + 1}: ${error.message || error}`);
+          remaining -= 1;
+          if (remaining === 0) {
+            finish([]);
+          }
+        });
+    });
+  });
+}
+
 function getSharedMasterBuild(type, id, entries, requestContext = {}) {
   const sharedEntries = sharedProviderEntriesFor(entries);
   const sharedKey = sharedMasterCacheKey(type, id);
@@ -2543,8 +2622,19 @@ async function getQualityBandStreams(type, id, entries, qualityBand, requestCont
 
   const sharedStreamsPromise = sharedBuild.firstBatchPromise || sharedBuild.fullPromise;
   const liveStreamsPromise = liveBuild.firstBatchPromise || liveBuild.fastPromise || liveBuild.fullPromise;
-  const [sharedStreams, liveStreams] = await Promise.all([sharedStreamsPromise, liveStreamsPromise]);
-  return qualitySortFromStreams([...sharedStreams, ...liveStreams], qualityBand);
+  const initialStreams = await collectResolvedStreamsByDeadline(
+    [sharedStreamsPromise, liveStreamsPromise],
+    QUALITY_RESPONSE_WAIT_MS
+  );
+  if (initialStreams.length > 0) {
+    return qualitySortFromStreams(initialStreams, qualityBand);
+  }
+
+  const fallbackStreams = await collectFirstNonEmptyStreamsByDeadline(
+    [liveBuild.fullPromise, sharedBuild.fullPromise],
+    QUALITY_EMPTY_FALLBACK_WAIT_MS
+  );
+  return qualitySortFromStreams(fallbackStreams, qualityBand);
 }
 
 async function getStreams(type, id, options = {}) {
@@ -2573,6 +2663,7 @@ async function getStreams(type, id, options = {}) {
   if (scope === "main") {
     const sharedBuild = getSharedMasterBuild(type, id, providerEntries, requestContext);
     const liveEntries = liveProviderEntriesFor(providerEntries);
+    const liveProviderIds = new Set(liveEntries.map((provider) => provider.id));
     const liveBuild = liveEntries.length > 0
       ? finalizedBuild(type, id, liveEntries, requestContext, {
         cacheKey: streamCacheKey(type, id, `${scope}:live`),
@@ -2582,8 +2673,29 @@ async function getStreams(type, id, options = {}) {
       : { fullPromise: Promise.resolve([]), fastPromise: Promise.resolve([]) };
     const sharedStreamsPromise = sharedBuild.firstBatchPromise || sharedBuild.fullPromise;
     const liveStreamsPromise = liveBuild.firstBatchPromise || liveBuild.fastPromise || liveBuild.fullPromise;
-    const [sharedStreams, liveStreams] = await Promise.all([sharedStreamsPromise, liveStreamsPromise]);
-    return sortStreams([...sharedStreams, ...liveStreams]);
+    const initialStreams = await collectResolvedStreamsByDeadline(
+      [sharedStreamsPromise, liveStreamsPromise],
+      QUALITY_RESPONSE_WAIT_MS
+    );
+    const hasLiveStreams = initialStreams.some((stream) => liveProviderIds.has(streamProviderId(stream)));
+    if (liveEntries.length > 0 && !hasLiveStreams) {
+      const liveFallbackStreams = await collectFirstNonEmptyStreamsByDeadline(
+        [liveBuild.fullPromise],
+        QUALITY_EMPTY_FALLBACK_WAIT_MS
+      );
+      if (liveFallbackStreams.length > 0) {
+        return sortStreams([...initialStreams, ...liveFallbackStreams]);
+      }
+    }
+    if (initialStreams.length > 0) {
+      return sortStreams(initialStreams);
+    }
+
+    const fallbackStreams = await collectFirstNonEmptyStreamsByDeadline(
+      [liveBuild.fullPromise, sharedBuild.fullPromise],
+      QUALITY_EMPTY_FALLBACK_WAIT_MS
+    );
+    return sortStreams(fallbackStreams);
   }
 
   const hasTorbox = entriesHaveProvider(entries, "torbox");
