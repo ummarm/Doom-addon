@@ -1213,8 +1213,8 @@ function __doomFilterSeekableStreams(streams, providerLabel) {
     var filtered = results.filter(function(item) { return item.ok; }).map(function(item) { return item.stream; });
     var label = providerLabel || "[Doom-addon]";
     if (filtered.length === 0) {
-      console.log(label + " Seekable filter kept 0/" + streams.length + " streams; dropping unseekable streams");
-      return [];
+      console.log(label + " Seekable filter kept 0/" + streams.length + " streams; returning original streams as fallback");
+      return streams;
     }
     console.log(label + " Seekable filter kept " + filtered.length + "/" + streams.length + " streams");
     return filtered;
