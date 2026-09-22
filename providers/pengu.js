@@ -1,7 +1,7 @@
 "use strict";
 
 const PROVIDER_NAME = "Pengu";
-const DEFAULT_MANIFEST_URL = "https://pengu.uk/manifest.json";
+const DEFAULT_MANIFEST_URL = "https://pengu.uk/%7B%22auth_token%22%3A%22o_3vfdJwk6Ala9JE5xNBzfU1FJqFicrxlAupcRebxV8%22%7D/manifest.json";
 
 function normalizeBaseUrl(raw) {
   return String(raw || "")
