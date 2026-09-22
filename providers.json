@@ -1,6 +1,6 @@
 {
   "name": "Doom-addon",
-  "version": "3.0",
+  "version": "3.0.1",
   "scrapers": [
     {
       "id": "4khdhub",
@@ -632,6 +632,28 @@
       "contentLanguage": [
         "en",
         "hi"
+      ]
+    },
+    {
+      "id": "pengu",
+      "name": "Pengu",
+      "description": "PenguPlay streams verified for playback and seeking before Doom-addon returns them",
+      "version": "1.0.0",
+      "author": "PenguPlay/ummarm",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/pengu.js",
+      "enabled": true,
+      "formats": [
+        "mp4",
+        "mkv",
+        "m3u8"
+      ],
+      "logo": "https://pengu.uk/penguplay-icon.png",
+      "contentLanguage": [
+        "multi"
       ]
     },
     {

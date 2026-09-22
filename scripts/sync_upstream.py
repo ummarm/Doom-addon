@@ -39,6 +39,7 @@ WEBSTREAMRMBG_REPOSITORY_URL = "https://github.com/newman2x/WebStreamrMBG"
 WEBSTREAMRMBG_MANIFEST_URL = "https://87d6a6ef6b58-webstreamrmbg.baby-beamup.club/manifest.json"
 TORBOX_MANIFEST_URL = "https://aiostreams.fortheweak.cloud/stremio/0f2abcc3-6334-4dc1-8852-4f1f54ee0ede/eyJpIjoiT0xEakJYaklobC84NTJPeFlrdkNyZz09IiwiZSI6IjBlRjBuUXMwRmwrMldXbXYwYVlpODliQitlblBjUGVrN1VEd1Zsb3RBSUk9IiwidCI6ImEifQ/manifest.json"
 TORBOX_BACKUP_MANIFEST_URL = "https://aiostreamsfortheweebsstable.midnightignite.me/stremio/4e02e39b-c022-4ce5-ad67-eeaca6b2fb5e/eyJpIjoid0k4WWxWZnQvaVhZNnkvTjZnN2sxUT09IiwiZSI6IlU4Z0tBYUp1WnQxaGJrQTgrT1FTS3Y0OWRmbG1wQVc1NzdLV1IzRGRBUWs9IiwidCI6ImEifQ/manifest.json"
+PENGU_MANIFEST_URL = "https://pengu.uk/manifest.json"
 ADDON_DOMAINS_URL = "https://raw.githubusercontent.com/ummarm/Doom-addon/main/domains.json"
 UPSTREAM_DOMAINS_URL = "https://raw.githubusercontent.com/phisher98/TVVVV/refs/heads/main/domains.json"
 USER_AGENT = "Doom-addon direct upstream sync"
@@ -52,6 +53,7 @@ DEFAULT_UPSTREAMS = {
         "webstreamrmbg": WEBSTREAMRMBG_MANIFEST_URL,
         "torbox": TORBOX_MANIFEST_URL,
         "torboxBackup": TORBOX_BACKUP_MANIFEST_URL,
+        "pengu": PENGU_MANIFEST_URL,
     },
     "repositories": {
         "webstreamrmbg": WEBSTREAMRMBG_REPOSITORY_URL,
@@ -1064,6 +1066,8 @@ def transform_source(provider: Provider, text: str) -> str:
 
 def bump_patch(version: str) -> str:
     parts = version.split(".")
+    if len(parts) == 2 and all(part.isdigit() for part in parts):
+        parts.append("0")
     if len(parts) != 3 or not all(part.isdigit() for part in parts):
         raise ValueError(f"Expected semantic version x.y.z, got {version!r}")
     major, minor, patch = (int(part) for part in parts)
@@ -1393,7 +1397,15 @@ def main() -> int:
             except HTTPError as exc:
                 if exc.code == 404:
                     continue
-                raise
+                warning = f"`{provider.scraper_id}` upstream fetch failed for `{upstream_path}`: {exc}"
+                sync_warnings.append(warning)
+                print(f"Warning: {warning}")
+                break
+            except Exception as exc:
+                warning = f"`{provider.scraper_id}` upstream fetch failed for `{upstream_path}`: {exc}"
+                sync_warnings.append(warning)
+                print(f"Warning: {warning}")
+                break
 
         if resolved_provider is None or upstream_text is None:
             variant_path = LOCAL_VARIANT_UPSTREAM_PATHS.get(provider.scraper_id)
@@ -1435,9 +1447,11 @@ def main() -> int:
     murph_manifest_url = manifests.get("murph", MURPH_MANIFEST_URL)
     webstreamrmbg_manifest_url = manifests.get("webstreamrmbg", WEBSTREAMRMBG_MANIFEST_URL)
     torbox_manifest_url = manifests.get("torbox", TORBOX_MANIFEST_URL)
+    pengu_manifest_url = manifests.get("pengu", PENGU_MANIFEST_URL)
     sync_warnings.extend(check_manifest_available("Flixnest", flixnest_manifest_url))
     sync_warnings.extend(check_manifest_available("WebStreamrMBG", webstreamrmbg_manifest_url))
     sync_warnings.extend(check_manifest_available("Torbox", torbox_manifest_url))
+    sync_warnings.extend(check_manifest_available("Pengu", pengu_manifest_url))
     sync_warnings.extend(check_murph_manifest(murph_manifest_url))
 
     changed_ids = {provider.scraper_id for provider in changed_providers} | changed_domain_ids
@@ -1446,13 +1460,12 @@ def main() -> int:
     if changed_domain_ids:
         changed_files.append("domains.json")
 
-    if changed_ids:
-        if registry_changed:
-            changed_files.append("providers.json")
-        if update_stremio_manifest(registry):
-            changed_files.append("manifest.json")
-        if update_package(registry):
-            changed_files.append("package.json")
+    if registry_changed:
+        changed_files.append("providers.json")
+    if update_stremio_manifest(registry):
+        changed_files.append("manifest.json")
+    if update_package(registry):
+        changed_files.append("package.json")
 
     changed = bool(changed_files)
     changed_names = ",".join(sorted(changed_ids))
@@ -1475,6 +1488,7 @@ def main() -> int:
         f"- `{webstreamrmbg_manifest_url}`",
         f"- `{upstreams.get('repositories', {}).get('webstreamrmbg', WEBSTREAMRMBG_REPOSITORY_URL)}`",
         f"- `{torbox_manifest_url}`",
+        f"- `{pengu_manifest_url}`",
     ]
     if changed_ids:
         summary_lines.extend(["", f"Updated scrapers: `{changed_names}`", "", "Version bumps:"])

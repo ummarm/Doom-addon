@@ -144,6 +144,15 @@ AIOStreams streams are passed through without Umbrella card formatting,
 playable probes, blocked-tag filtering, language filtering, or de-duplication.
 Results use the same quality and size sorting.
 
+Pengu uses its own configured manifest URL and is processed through Doom-addon's
+normal media-match, playback, and range-seek validation before it is routed to
+the `4K UHD`, `FHD`, or `HD` add-on. Keep the personal Pengu URL out of Git and
+set it only on the server:
+
+```sh
+PENGU_MANIFEST_URL=https://pengu.uk/<your-config>/manifest.json npm start
+```
+
 Quality group add-ons are also exposed. `Umbrella 4K` keeps REMUX, UHD, 4K,
 and 2160p streams. `Umbrella 1080` keeps 1080p streams plus streams where no
 quality can be detected. `Umbrella Low` keeps 720p, 480p, 360p, and lower
