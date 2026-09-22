@@ -10,11 +10,17 @@ function normalizeBaseUrl(raw) {
 }
 
 function configuredBaseUrl() {
-  return normalizeBaseUrl(
-    process.env.PENGU_MANIFEST_URL
-    || process.env.PENGU_BASE_URL
-    || DEFAULT_MANIFEST_URL
-  );
+  const configuredUrl = process.env.PENGU_MANIFEST_URL || process.env.PENGU_BASE_URL;
+  if (configuredUrl) {
+    return normalizeBaseUrl(configuredUrl);
+  }
+
+  const authToken = String(process.env.PENGU_AUTH_TOKEN || "").trim();
+  if (authToken) {
+    return `${normalizeBaseUrl(DEFAULT_MANIFEST_URL)}/${encodeURIComponent(JSON.stringify({ auth_token: authToken }))}`;
+  }
+
+  return normalizeBaseUrl(DEFAULT_MANIFEST_URL);
 }
 
 function streamId(imdbId, tmdbId, mediaType, season, episode) {

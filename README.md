@@ -150,8 +150,10 @@ the `4K UHD`, `FHD`, or `HD` add-on. Keep the personal Pengu URL out of Git and
 set it only on the server:
 
 ```sh
-PENGU_MANIFEST_URL=https://pengu.uk/<your-config>/manifest.json npm start
+PENGU_AUTH_TOKEN=<your-pengu-auth-token> npm start
 ```
+
+For Docker deployments, set `PENGU_AUTH_TOKEN` in the container environment. Do not commit the configured Pengu manifest URL or token to Git.
 
 Quality group add-ons are also exposed. `Umbrella 4K` keeps REMUX, UHD, 4K,
 and 2160p streams. `Umbrella 1080` keeps 1080p streams plus streams where no
