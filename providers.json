@@ -1,6 +1,6 @@
 {
   "name": "Doom-addon",
-  "version": "3.0.1",
+  "version": "3.0.2",
   "scrapers": [
     {
       "id": "4khdhub",
@@ -463,6 +463,52 @@
         "tv"
       ],
       "filename": "providers/flix_streams_signalvault.js",
+      "enabled": true,
+      "formats": [
+        "mp4",
+        "mkv",
+        "m3u8"
+      ],
+      "logo": "https://flixnest.app/flix-streams/static/icon.png",
+      "contentLanguage": [
+        "en",
+        "hi"
+      ]
+    },
+    {
+      "id": "flix_streams_usenetvault",
+      "name": "Flix-Streams Usenet Vault",
+      "description": "Usenet Vault results wrapped from the configured Flix-Streams add-on",
+      "version": "1.0.0",
+      "author": "ummarm",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/flix_streams_usenetvault.js",
+      "enabled": true,
+      "formats": [
+        "mp4",
+        "mkv",
+        "m3u8"
+      ],
+      "logo": "https://flixnest.app/flix-streams/static/icon.png",
+      "contentLanguage": [
+        "en",
+        "hi"
+      ]
+    },
+    {
+      "id": "flix_streams_streamvault",
+      "name": "Flix-Streams Stream Vault",
+      "description": "Stream Vault results wrapped from the configured Flix-Streams add-on",
+      "version": "1.0.0",
+      "author": "ummarm",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/flix_streams_streamvault.js",
       "enabled": true,
       "formats": [
         "mp4",

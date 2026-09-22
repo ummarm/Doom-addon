@@ -81,9 +81,14 @@ function isKnownNamedFlixStream(stream) {
     || /\bdebrid\s*vault\b/i.test(text)
     || /\bdebridvault\b/i.test(text)
     || /\b(?:signal\s*vault|signalvault)\b/i.test(text)
+    || /\b(?:usenet\s*vault|usenetvault)\b/i.test(text)
+    || /\b(?:stream\s*vault|streamvault)\b/i.test(text)
     || /\benable[-_]?telegram\b/i.test(text)
+    || /\benable[-_]?usenet[-_]?vault\b/i.test(text)
+    || /\benable[-_]?stream[-_]?vault\b/i.test(text)
     || /\/api\/telegram\/media\b/i.test(text)
     || /\/api\/debrid[-_]?vault\/media\b/i.test(text)
+    || /\/api\/(?:usenet|stream)[-_]?vault\/media\b/i.test(text)
     || /\b(?:4khdhub|hdhub4u|hubdrive|hubcloud)\b/i.test(text)
     || /\/api\/(?:4khdhub|hdhub4u)\/media\b/i.test(text);
 }
