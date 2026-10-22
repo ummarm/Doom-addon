@@ -830,7 +830,7 @@
         "tv"
       ],
       "filename": "providers/moviebox.js",
-      "enabled": true,
+      "enabled": false,
       "formats": [
         "mp4",
         "mkv",
