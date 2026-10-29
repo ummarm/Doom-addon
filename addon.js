@@ -2642,11 +2642,15 @@ async function getQualityBandStreams(type, id, entries, qualityBand, requestCont
     [sharedStreamsPromise, liveStreamsPromise],
     QUALITY_RESPONSE_WAIT_MS
   );
-  if (initialStreams.length > 0) {
-    return qualitySortFromStreams(initialStreams, qualityBand);
+  const initialQualityStreams = qualitySortFromStreams(initialStreams, qualityBand);
+  if (initialQualityStreams.length > 0) {
+    return initialQualityStreams;
   }
 
-  const fallbackStreams = await collectFirstNonEmptyStreamsByDeadline(
+  // An early result in another quality band must not make this tab appear empty.
+  // Keep the existing short fallback window, but only return once this band has
+  // had a chance to receive a matching completed provider batch.
+  const fallbackStreams = await collectResolvedStreamsByDeadline(
     [liveBuild.fullPromise, sharedBuild.fullPromise],
     QUALITY_EMPTY_FALLBACK_WAIT_MS
   );
