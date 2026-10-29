@@ -1275,7 +1275,8 @@ function streamRequiresProbe(stream) {
     "flix_streams_signalvault",
     "flix_streams_usenetvault",
     "flix_streams_streamvault",
-    "flix_streams_debridvault"
+    "flix_streams_debridvault",
+    "pengu"
   ].includes(stream.behaviorHints.doomProviderId));
 }
 
@@ -1686,6 +1687,34 @@ function hasExpectedEpisode(text, parsed) {
   return true;
 }
 
+function hasExplicitExpectedEpisode(text, parsed) {
+  if (!parsed || parsed.type !== "series") {
+    return false;
+  }
+
+  const normalized = normalizeMatchText(text);
+  const season = String(parsed.season);
+  const episode = String(parsed.episode);
+  const paddedSeason = season.padStart(2, "0");
+  const paddedEpisode = episode.padStart(2, "0");
+  const expectedPatterns = [
+    `s${paddedSeason} e${paddedEpisode}`,
+    `s${season} e${episode}`,
+    `season ${season} episode ${episode}`,
+    `season ${paddedSeason} episode ${paddedEpisode}`
+  ];
+  if (expectedPatterns.some((pattern) => normalized.includes(pattern))) {
+    return true;
+  }
+
+  const seasonEpisodeMatch = normalized.match(/\bs\s*0?(\d+)\s*e\s*0?(\d+)\b/);
+  return Boolean(
+    seasonEpisodeMatch
+    && Number(seasonEpisodeMatch[1]) === parsed.season
+    && Number(seasonEpisodeMatch[2]) === parsed.episode
+  );
+}
+
 function matchesRequestedMedia(stream, mediaInfo, parsed) {
   if (!mediaInfo || !mediaInfo.title) {
     return true;
@@ -1721,6 +1750,11 @@ function matchesRequestedMedia(stream, mediaInfo, parsed) {
     const hasExactToken = normalizedEvidence.split(" ").includes(token);
     if (!hasExactToken) {
       return false;
+    }
+    // A one-word series title plus an exact requested episode is sufficient
+    // evidence even when the filename does not include a release year.
+    if (hasExplicitExpectedEpisode(evidence, parsed)) {
+      return true;
     }
     if (mediaInfo.year && normalizedEvidence.includes(mediaInfo.year)) {
       return true;
