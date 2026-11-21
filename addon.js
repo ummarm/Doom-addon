@@ -38,7 +38,7 @@ const SHARED_PREWARM_SCOPES = new Set(["main", "quality-4k", "quality-1080", "qu
 const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "manifest.json"), "utf8"));
 const providerRegistry = JSON.parse(fs.readFileSync(path.join(ROOT, "providers.json"), "utf8"));
 const SPORTS_LIVE_BASE_URL = process.env.SPORTS_LIVE_BASE_URL
-  || "https://sports.highfly.dev/eyJpbmNsdWRlU3BvcnRzIjpbImNyaWNrZXQiLCJmb290YmFsbCIsIm90aGVyIl19";
+  || "https://sports.highfly.to/3e5a6479-111d-4d6f-99e0-41b76c47841e.8b5a5d20adc80ecc";
 const NUVIO_LIVE_BASE_URL = process.env.NUVIO_LIVE_BASE_URL
   || "https://nuvio-live-sports.onrender.com/%7B%22sports%22%3A%22football%2Ccricket%22%7D";
 const NUVIO_LIVE_ORIGIN = new URL(NUVIO_LIVE_BASE_URL).origin;
