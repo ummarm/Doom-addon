@@ -40,7 +40,7 @@ const providerRegistry = JSON.parse(fs.readFileSync(path.join(ROOT, "providers.j
 const SPORTS_LIVE_BASE_URL = process.env.SPORTS_LIVE_BASE_URL
   || "https://sports.highfly.to/3e5a6479-111d-4d6f-99e0-41b76c47841e.8b5a5d20adc80ecc";
 const NUVIO_LIVE_BASE_URL = process.env.NUVIO_LIVE_BASE_URL
-  || "https://nuvio-live-sports.onrender.com/%7B%22sports%22%3A%22football%2Ccricket%22%7D";
+  || "https://nuviosports.xyz/eyJ0aW1lem9uZSI6IkF1c3RyYWxpYS9TeWRuZXkiLCJzcG9ydHMiOiJmb290YmFsbCxjcmlja2V0IiwicmVwbGF5U291cmNlcyI6ImxpdmV0diJ9";
 const NUVIO_LIVE_ORIGIN = new URL(NUVIO_LIVE_BASE_URL).origin;
 const sportsFreeLiveCatalogs = [
   {
