@@ -1293,7 +1293,8 @@ function streamRequiresProbe(stream) {
     "flix_streams_usenetvault",
     "flix_streams_streamvault",
     "flix_streams_debridvault",
-    "pengu"
+    "pengu",
+    "cncverse"
   ].includes(stream.behaviorHints.doomProviderId));
 }
 
@@ -1314,6 +1315,8 @@ async function probeStream(stream, options = {}) {
   const parsed = options.parsed;
   const headers = streamRequestHeaders(stream);
   const isHls = looksLikeHls(stream.url);
+  const requireFileSeek = streamProviderId(stream) === "cncverse";
+  if (requireFileSeek && (isHls || isBlockedNavigationUrl(stream.url))) return { ok: false };
   const rangedHeaders = Object.assign({}, headers);
   if (!isHls && !rangedHeaders.Range && !rangedHeaders.range) {
     rangedHeaders.Range = "bytes=0-4095";
@@ -1333,6 +1336,8 @@ async function probeStream(stream, options = {}) {
   }
 
   const sample = await responseSample(getResponse);
+  if (requireFileSeek && (looksLikeHls(getResponse.url, getResponse.headers.get("content-type") || "")
+      || sample.text.includes("#EXTM3U"))) return { ok: false };
   const getProbe = responseProbeResult(getResponse, stream.url, sample, { requireSeekable });
   if (getProbe.ok) {
     if (requireSeekable && !isHls) {
@@ -1348,6 +1353,10 @@ async function probeStream(stream, options = {}) {
           `${stream.name} seek probe`
         );
         const seekSample = await responseSample(seekResponse);
+        if (requireFileSeek && (seekResponse.status !== 206
+            || contentRangeStart(seekResponse) !== offset
+            || looksLikeHls(seekResponse.url, seekResponse.headers.get("content-type") || "")
+            || seekSample.text.includes("#EXTM3U"))) return { ok: false };
         const seekProbe = hardSeekProbeResult(seekResponse, stream.url, seekSample, offset);
         if (!seekProbe.ok) {
           return seekProbe;
@@ -1446,6 +1455,7 @@ const UMBRELLA_PROVIDER_CODES = {
   "flix_streams_vegamovies": "VG",
   "webstreamrmbg": "WSM",
   "pengu": "PNG",
+  "cncverse": "CNC",
   "torbox": "TB",
   "mediafusion": "MF",
   "hindmoviez": "HM",
@@ -2179,7 +2189,7 @@ function normalizeStream(rawStream, provider, mediaInfo) {
 
   // Pengu sometimes supplies only quality/codec metadata as the filename;
   // retain its real title description for matching, not the generated card.
-  if (provider.id === "pengu" && /^(?:4k|(?:2160|1440|1080|720|480|360)p)/i.test(filename)) {
+  if (["pengu", "cncverse"].includes(provider.id) && /^(?:4k|(?:2160|1440|1080|720|480|360)p)/i.test(filename)) {
     originalMatchEvidence.set(normalizedStream, [
       filename, rawStream.title, rawStream.description
     ].filter(Boolean).join(" "));

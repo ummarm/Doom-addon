@@ -1452,6 +1452,8 @@ def main() -> int:
     sync_warnings.extend(check_manifest_available("WebStreamrMBG", webstreamrmbg_manifest_url))
     sync_warnings.extend(check_manifest_available("Torbox", torbox_manifest_url))
     sync_warnings.extend(check_manifest_available("Pengu", pengu_manifest_url))
+    if manifests.get("cncverse"):
+        sync_warnings.extend(check_manifest_available("CNCVerse", manifests["cncverse"]))
     sync_warnings.extend(check_murph_manifest(murph_manifest_url))
 
     changed_ids = {provider.scraper_id for provider in changed_providers} | changed_domain_ids
