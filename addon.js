@@ -1160,7 +1160,10 @@ function isHdhubStream(stream) {
 }
 
 function hardSeekOffsets(stream, response) {
-  const size = Math.max(streamSizeBytes(stream), responseContentSize(response));
+  const actualSize = responseContentSize(response);
+  const size = streamProviderId(stream) === "pengu" && actualSize > 0
+    ? actualSize
+    : Math.max(streamSizeBytes(stream), actualSize);
   const minimumOffset = 1024 * 1024;
   const sampleSize = 4096;
   if (size > minimumOffset * 2) {
@@ -1308,6 +1311,9 @@ async function probeStream(stream, options = {}) {
   }
 
   const timeoutMs = options.timeoutMs || STREAM_PROBE_TIMEOUT_MS;
+  const fetchProbe = (requestOptions) => fetch(stream.url, streamProviderId(stream) === "pengu"
+    ? { ...requestOptions, signal: AbortSignal.timeout(timeoutMs) }
+    : requestOptions);
   const requireSeekable = streamRequiresProbe(stream);
   const mediaInfo = options.mediaInfo;
   const parsed = options.parsed;
@@ -1321,7 +1327,7 @@ async function probeStream(stream, options = {}) {
   }
 
   const getResponse = await withTimeout(
-    fetch(stream.url, {
+    fetchProbe({
       method: "GET",
       headers: isHls ? headers : rangedHeaders,
       redirect: "follow"
@@ -1342,7 +1348,7 @@ async function probeStream(stream, options = {}) {
       for (const offset of hardSeekOffsets(stream, getResponse)) {
         const seekHeaders = Object.assign({}, headers, { Range: `bytes=${offset}-${offset + 4095}` });
         const seekResponse = await withTimeout(
-          fetch(stream.url, {
+          fetchProbe({
             method: "GET",
             headers: seekHeaders,
             redirect: "follow"
@@ -1370,7 +1376,7 @@ async function probeStream(stream, options = {}) {
   }
 
   const headResponse = await withTimeout(
-    fetch(stream.url, {
+    fetchProbe({
       method: "HEAD",
       headers,
       redirect: "follow"
@@ -2498,16 +2504,36 @@ function sharedMasterCacheKey(type, id) {
   return streamCacheKey(type, id, QUALITY_SHARED_CACHE_SCOPE);
 }
 
+function interleavePenguQualities(streams) {
+  const bands = new Map();
+  for (const stream of streams) {
+    const band = streamQualityBand(stream);
+    if (!bands.has(band)) bands.set(band, []);
+    bands.get(band).push(stream);
+  }
+  const ordered = [];
+  for (let index = 0; ordered.length < streams.length; index++) {
+    for (const group of bands.values()) {
+      if (index < group.length) ordered.push(group[index]);
+    }
+  }
+  return ordered;
+}
+
 async function verifyPengu(state, index, provider, ready, options = {}) {
   if (!state) return [];
   await state.tasks[index];
-  return finalizeStreams([state.results[index]], {
+  const result = state.results[index];
+  const candidateResult = result?.status === "fulfilled"
+    ? { status: "fulfilled", value: interleavePenguQualities(result.value) }
+    : result;
+  return finalizeStreams([candidateResult], {
     logFailures: options.logFailures !== false,
     mediaInfo: state.mediaInfo,
     parsed: state.parsed,
     providerEntries: [provider],
     probeOnlyRequired: true,
-    probeTimeoutMs: options.probeTimeoutMs,
+    probeTimeoutMs: options.probeTimeoutMs || STREAM_PROBE_TIMEOUT_MS + 2000,
     qualityBand: options.qualityBand || "",
     onPlayable(stream) {
       if (!options.qualityBand || streamQualityBand(stream) === options.qualityBand) {

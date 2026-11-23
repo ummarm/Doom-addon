@@ -18,15 +18,19 @@ const addon = new Module(filename, module);
 addon.filename = filename;
 addon.paths = Module._nodeModulePaths(path.dirname(filename));
 addon._compile(fs.readFileSync(filename, "utf8") +
-  "\nmodule.exports.test = { getQualityBandStreams, getSharedMasterBuild };", filename);
-const { getQualityBandStreams, getSharedMasterBuild } = addon.exports.test;
+  "\nmodule.exports.test = { getQualityBandStreams, getSharedMasterBuild, interleavePenguQualities };", filename);
+const { getQualityBandStreams, getSharedMasterBuild, interleavePenguQualities } = addon.exports.test;
 
 async function check() {
   const id = "tmdb:126400";
   const title = "Gangs of Wasseypur - Part 2";
   const good = "https://media.example.test/seekable.mp4";
   const bad = "https://media.example.test/not-seekable.mp4";
-  const stream = (url) => ({ url, title: `${title} 2012 1080p` });
+  const stream = (url, quality = "1080p") => ({
+    url, title: `${title} 2012 ${quality}`, behaviorHints: { videoSize: 40000000 }
+  });
+  const grouped = ["2160p", "2160p", "1080p", "1080p", "720p"].map((quality) => stream(good, quality));
+  assert.deepEqual(interleavePenguQualities(grouped), [grouped[0], grouped[2], grouped[4], grouped[1], grouped[3]]);
   let penguCalls = 0;
   let releaseSlowProbe;
   const slowProbe = new Promise((resolve) => { releaseSlowProbe = resolve; });
@@ -76,7 +80,7 @@ async function check() {
     assert.ok(full.every((s) => s.url !== bad));
     assert.equal(penguCalls, 1);
     assert.equal(ranges.length, 2);
-    assert.ok(ranges[1] > 0);
+    assert.equal(ranges[1], 1400000);
 
     const refreshId = "tmdb:126401";
     let regularCalls = 0;
