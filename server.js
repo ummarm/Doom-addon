@@ -204,7 +204,7 @@ async function freshAioPlaybackUrl(entry) {
   }
 
   const streams = await aioStreamsProvider.getStreams(
-    "",
+    parsed.tmdbId || "",
     parsed.mediaType,
     parsed.season,
     parsed.episode,

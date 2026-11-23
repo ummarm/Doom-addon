@@ -826,6 +826,11 @@ function delay(ms) {
 }
 
 function parseStremioId(type, id) {
+  const tmdbMovie = type === "movie" && /^tmdb:([1-9]\d*)$/i.exec(String(id || ""));
+  if (tmdbMovie) {
+    return { imdbId: "", tmdbId: tmdbMovie[1], type: "movie", mediaType: "movie", season: null, episode: null };
+  }
+
   const parts = String(id || "").split(":");
   const imdbId = parts[0];
 
@@ -894,7 +899,8 @@ async function resolveMediaInfo(tmdbId, mediaType) {
   return {
     title: title || originalTitle || "",
     originalTitle: originalTitle || title || "",
-    year: date ? String(date).slice(0, 4) : ""
+    year: date ? String(date).slice(0, 4) : "",
+    imdbId: /^tt\d+$/i.test(payload.imdb_id || "") ? payload.imdb_id : ""
   };
 }
 
@@ -2452,11 +2458,12 @@ async function startStreamBuild(type, id, entries, requestContext = {}) {
   let tmdbId;
   let mediaInfo = null;
   try {
-    tmdbId = await resolveTmdbId(parsed.imdbId, parsed.mediaType);
+    tmdbId = parsed.tmdbId || await resolveTmdbId(parsed.imdbId, parsed.mediaType);
     if (!tmdbId) {
       return null;
     }
     mediaInfo = await resolveMediaInfo(tmdbId, parsed.mediaType);
+    if (parsed.tmdbId) parsed.imdbId = mediaInfo.imdbId;
   } catch (error) {
     console.error(`[TMDB] ${error.message || error}`);
     return null;
