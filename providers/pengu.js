@@ -1,6 +1,7 @@
 "use strict";
 
 const PROVIDER_NAME = "Pengu";
+const RETRYABLE_STATUS = new Set([502, 503, 504]);
 const DEFAULT_MANIFEST_URL = "https://pengu.uk/%7B%22auth_token%22%3A%22o_3vfdJwk6Ala9JE5xNBzfU1FJqFicrxlAupcRebxV8%22%7D/manifest.json";
 
 function normalizeBaseUrl(raw) {
@@ -39,16 +40,19 @@ async function fetchPenguStreams(imdbId, tmdbId, mediaType, season, episode) {
     return [];
   }
 
-  const response = await fetch(
-    `${baseUrl}/stream/${encodeURIComponent(stremioType)}/${encodeURIComponent(id)}.json`,
-    {
-      headers: {
-        Accept: "application/json",
-        "User-Agent": "Doom-addon/3.0"
-      },
-      redirect: "follow"
-    }
-  );
+  const url = `${baseUrl}/stream/${encodeURIComponent(stremioType)}/${encodeURIComponent(id)}.json`;
+  const options = {
+    headers: {
+      Accept: "application/json",
+      "User-Agent": "Doom-addon/3.0"
+    },
+    redirect: "follow"
+  };
+  let response = await fetch(url, options);
+  if (RETRYABLE_STATUS.has(response.status)) {
+    await response.body?.cancel().catch(() => {});
+    response = await fetch(url, options);
+  }
 
   if (!response.ok) {
     throw new Error(`${PROVIDER_NAME} returned HTTP ${response.status}`);

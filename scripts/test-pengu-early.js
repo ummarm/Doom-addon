@@ -90,14 +90,11 @@ async function check() {
     ];
     const cold = await getSharedMasterBuild("movie", refreshId, refreshEntries).fullPromise;
     assert.equal(cold.length, 1);
-    const warm = await getQualityBandStreams("movie", refreshId, refreshEntries, "1080");
-    assert.equal(warm.length, 1);
     assert.equal(refreshCalls, 1);
 
-    const refresh = { requestHeaders: { "cache-control": "no-cache" } };
     const [first, second] = await Promise.all([
-      getQualityBandStreams("movie", refreshId, refreshEntries, "1080", refresh),
-      getQualityBandStreams("movie", refreshId, refreshEntries, "1080", refresh)
+      getQualityBandStreams("movie", refreshId, refreshEntries, "1080"),
+      getQualityBandStreams("movie", refreshId, refreshEntries, "1080")
     ]);
     for (const streams of [first, second]) {
       assert.equal(streams.filter((s) => s.behaviorHints.doomProviderId === "pengu").length, 1);
@@ -107,6 +104,14 @@ async function check() {
     assert.deepEqual(recover.map((s) => s.url).sort(), first.map((s) => s.url).sort());
     assert.equal(regularCalls, 1);
     assert.equal(refreshCalls, 2);
+
+    const pengu = require("../providers/pengu");
+    let upstreamCalls = 0;
+    global.fetch = async () => ++upstreamCalls === 1
+      ? new Response(null, { status: 502 })
+      : Response.json({ streams: [stream(good)] });
+    assert.equal((await pengu.getStreams("126400")).length, 1);
+    assert.equal(upstreamCalls, 2);
   } finally {
     releaseSlowProbe();
     global.fetch = before;

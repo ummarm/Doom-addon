@@ -2512,6 +2512,7 @@ async function verifyPengu(state, index, provider, ready, options = {}) {
     onPlayable(stream) {
       if (!options.qualityBand || streamQualityBand(stream) === options.qualityBand) {
         ready.push(stream);
+        options.onVerified?.(stream);
       }
     }
   });
@@ -2681,8 +2682,18 @@ function refreshCachedPengu(type, id, sharedKey, provider, requestContext) {
   cached.penguRefreshAt = now;
 
   const readyPenguStreams = [];
+  const firstByBand = new Map(["", "4k", "1080", "low"].map((band) => {
+    let resolve;
+    const promise = new Promise((done) => { resolve = done; });
+    return [band, { promise, resolve }];
+  }));
   const fullPromise = startStreamBuild(type, id, [provider], requestContext)
-    .then((state) => verifyPengu(state, 0, provider, readyPenguStreams))
+    .then((state) => verifyPengu(state, 0, provider, readyPenguStreams, {
+      onVerified(stream) {
+        firstByBand.get("").resolve();
+        firstByBand.get(streamQualityBand(stream))?.resolve();
+      }
+    }))
     .catch((error) => {
       console.error(`[Pengu] Refresh failed: ${error.message || error}`);
       return readyPenguStreams.slice();
@@ -2699,7 +2710,11 @@ function refreshCachedPengu(type, id, sharedKey, provider, requestContext) {
       return streams;
     })
     .finally(() => streamInflight.delete(key));
-  const refresh = { fullPromise, readyPenguStreams };
+  const refresh = {
+    fullPromise,
+    readyPenguStreams,
+    firstForBand: (band) => Promise.race([fullPromise, firstByBand.get(band || "")?.promise || fullPromise])
+  };
   streamInflight.set(key, refresh);
   return refresh;
 }
@@ -2718,16 +2733,15 @@ function getSharedMasterBuild(type, id, entries, requestContext = {}) {
     sharedFullPromise = Promise.resolve(cachedSharedStreams);
     sharedFastPromise = sharedFullPromise;
     sharedFirstBatchPromise = sharedFullPromise;
-    const cacheControl = String(requestContext.requestHeaders?.["cache-control"] || "");
     const pengu = sharedEntries.find((provider) => provider.id === "pengu");
     const band = requestContext.qualityBand;
     const hasCachedPengu = cachedSharedStreams.some((stream) => streamProviderId(stream) === "pengu" &&
       (!band || streamQualityBand(stream) === band));
-    if (pengu && !hasCachedPengu && /(?:^|,)\s*(?:no-cache|no-store|max-age=0)\s*(?:,|$)/i.test(cacheControl)) {
+    if (pengu && !hasCachedPengu) {
       const refresh = refreshCachedPengu(type, id, sharedKey, pengu, requestContext);
       if (refresh) {
         readyPenguStreams = refresh.readyPenguStreams;
-        sharedFirstBatchPromise = Promise.race([refresh.fullPromise, delay(STREAM_FAST_PROBE_TIMEOUT_MS)])
+        sharedFirstBatchPromise = Promise.race([refresh.firstForBand(band), delay(STREAM_PROBE_TIMEOUT_MS)])
           .then(() => cachedSharedStreams);
         sharedFastPromise = sharedFirstBatchPromise;
       }
