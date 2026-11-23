@@ -12,6 +12,7 @@ const STREAM_PROBE_TIMEOUT_MS = Number(process.env.STREAM_PROBE_TIMEOUT_MS || 80
 const STREAM_PROBE_CONCURRENCY = Number(process.env.STREAM_PROBE_CONCURRENCY || 6);
 const STREAM_CACHE_TTL_MS = Number(process.env.STREAM_CACHE_TTL_MS || 10 * 60 * 1000);
 const STREAM_CACHE_MAX_ENTRIES = Number(process.env.STREAM_CACHE_MAX_ENTRIES || 100);
+const PENGU_REFRESH_COOLDOWN_MS = 30 * 1000;
 const STREAM_FAST_PROVIDER_WAIT_MS = Number(process.env.STREAM_FAST_PROVIDER_WAIT_MS || 25000);
 const STREAM_FAST_PROBE_TIMEOUT_MS = Number(process.env.STREAM_FAST_PROBE_TIMEOUT_MS || 2500);
 const MEDIAFUSION_PROBE_TIMEOUT_MS = Number(process.env.MEDIAFUSION_PROBE_TIMEOUT_MS || 8000);
@@ -2497,6 +2498,25 @@ function sharedMasterCacheKey(type, id) {
   return streamCacheKey(type, id, QUALITY_SHARED_CACHE_SCOPE);
 }
 
+async function verifyPengu(state, index, provider, ready, options = {}) {
+  if (!state) return [];
+  await state.tasks[index];
+  return finalizeStreams([state.results[index]], {
+    logFailures: options.logFailures !== false,
+    mediaInfo: state.mediaInfo,
+    parsed: state.parsed,
+    providerEntries: [provider],
+    probeOnlyRequired: true,
+    probeTimeoutMs: options.probeTimeoutMs,
+    qualityBand: options.qualityBand || "",
+    onPlayable(stream) {
+      if (!options.qualityBand || streamQualityBand(stream) === options.qualityBand) {
+        ready.push(stream);
+      }
+    }
+  });
+}
+
 function finalizedBuild(type, id, entries, requestContext = {}, options = {}) {
   const buildStatePromise = startStreamBuild(type, id, entries, {
     requestHeaders: requestContext.requestHeaders || {}
@@ -2504,24 +2524,7 @@ function finalizedBuild(type, id, entries, requestContext = {}, options = {}) {
   const penguIndex = entries.findIndex((provider) => provider.id === "pengu");
   const readyPenguStreams = [];
   const penguPromise = penguIndex === -1 ? Promise.resolve([]) : buildStatePromise
-    .then(async (state) => {
-      if (!state) return [];
-      await state.tasks[penguIndex];
-      return finalizeStreams([state.results[penguIndex]], {
-        logFailures: options.logFailures !== false,
-        mediaInfo: state.mediaInfo,
-        parsed: state.parsed,
-        providerEntries: [entries[penguIndex]],
-        probeOnlyRequired: true,
-        probeTimeoutMs: options.probeTimeoutMs,
-        qualityBand: options.qualityBand || "",
-        onPlayable(stream) {
-          if (!options.qualityBand || streamQualityBand(stream) === options.qualityBand) {
-            readyPenguStreams.push(stream);
-          }
-        }
-      });
-    })
+    .then((state) => verifyPengu(state, penguIndex, entries[penguIndex], readyPenguStreams, options))
     .catch((error) => {
       console.error(`[Pengu] Verification failed: ${error.message || error}`);
       return readyPenguStreams.slice();
@@ -2667,6 +2670,40 @@ async function collectFirstNonEmptyStreamsByDeadline(streamPromises, timeoutMs) 
   });
 }
 
+function refreshCachedPengu(type, id, sharedKey, provider, requestContext) {
+  const key = `${sharedKey}:pengu-refresh`;
+  const pending = streamInflight.get(key);
+  if (pending) return pending;
+
+  const cached = streamCache.get(sharedKey);
+  const now = Date.now();
+  if (!cached || now - (cached.penguRefreshAt ?? -Infinity) < PENGU_REFRESH_COOLDOWN_MS) return null;
+  cached.penguRefreshAt = now;
+
+  const readyPenguStreams = [];
+  const fullPromise = startStreamBuild(type, id, [provider], requestContext)
+    .then((state) => verifyPengu(state, 0, provider, readyPenguStreams))
+    .catch((error) => {
+      console.error(`[Pengu] Refresh failed: ${error.message || error}`);
+      return readyPenguStreams.slice();
+    })
+    .then((streams) => {
+      if (streams.length && streamCache.get(sharedKey) === cached) {
+        const updatedBands = new Set(streams.map(streamQualityBand));
+        cached.streams = sortStreams([
+          ...cached.streams.filter((stream) => streamProviderId(stream) !== "pengu" ||
+            !updatedBands.has(streamQualityBand(stream))),
+          ...streams
+        ]);
+      }
+      return streams;
+    })
+    .finally(() => streamInflight.delete(key));
+  const refresh = { fullPromise, readyPenguStreams };
+  streamInflight.set(key, refresh);
+  return refresh;
+}
+
 function getSharedMasterBuild(type, id, entries, requestContext = {}) {
   const sharedEntries = sharedProviderEntriesFor(entries);
   const sharedKey = sharedMasterCacheKey(type, id);
@@ -2681,6 +2718,20 @@ function getSharedMasterBuild(type, id, entries, requestContext = {}) {
     sharedFullPromise = Promise.resolve(cachedSharedStreams);
     sharedFastPromise = sharedFullPromise;
     sharedFirstBatchPromise = sharedFullPromise;
+    const cacheControl = String(requestContext.requestHeaders?.["cache-control"] || "");
+    const pengu = sharedEntries.find((provider) => provider.id === "pengu");
+    const band = requestContext.qualityBand;
+    const hasCachedPengu = cachedSharedStreams.some((stream) => streamProviderId(stream) === "pengu" &&
+      (!band || streamQualityBand(stream) === band));
+    if (pengu && !hasCachedPengu && /(?:^|,)\s*(?:no-cache|no-store|max-age=0)\s*(?:,|$)/i.test(cacheControl)) {
+      const refresh = refreshCachedPengu(type, id, sharedKey, pengu, requestContext);
+      if (refresh) {
+        readyPenguStreams = refresh.readyPenguStreams;
+        sharedFirstBatchPromise = Promise.race([refresh.fullPromise, delay(STREAM_FAST_PROBE_TIMEOUT_MS)])
+          .then(() => cachedSharedStreams);
+        sharedFastPromise = sharedFirstBatchPromise;
+      }
+    }
   } else if (sharedEntries.length > 0 && streamInflight.has(sharedKey)) {
     console.log(`[Stream cache] Joining shared quality build for ${sharedKey}`);
     const inflight = streamInflight.get(sharedKey);
@@ -2739,7 +2790,7 @@ function prewarmSharedMaster(type, id, entries, requestContext = {}) {
 }
 
 async function getQualityBandStreams(type, id, entries, qualityBand, requestContext = {}) {
-  const sharedBuild = getSharedMasterBuild(type, id, entries, requestContext);
+  const sharedBuild = getSharedMasterBuild(type, id, entries, { ...requestContext, qualityBand });
   const liveEntries = liveProviderEntriesFor(entries);
   const liveBuild = liveEntries.length > 0
     ? finalizedBuild(type, id, liveEntries, requestContext, {

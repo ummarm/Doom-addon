@@ -11,6 +11,7 @@ process.env.STREAM_LIVE_FIRST_BATCH_WAIT_MS = "150";
 process.env.QUALITY_RESPONSE_WAIT_MS = "200";
 process.env.QUALITY_EMPTY_FALLBACK_WAIT_MS = "20";
 process.env.STREAM_PROBE_TIMEOUT_MS = "500";
+process.env.STREAM_FAST_PROBE_TIMEOUT_MS = "150";
 
 const filename = path.resolve(__dirname, "../addon.js");
 const addon = new Module(filename, module);
@@ -76,6 +77,36 @@ async function check() {
     assert.equal(penguCalls, 1);
     assert.equal(ranges.length, 2);
     assert.ok(ranges[1] > 0);
+
+    const refreshId = "tmdb:126401";
+    let regularCalls = 0;
+    let refreshCalls = 0;
+    const refreshEntries = [
+      { id: "pengu", name: "Pengu", getStreams: () => refreshCalls++ === 0 ? [] : [stream(good)] },
+      { id: "ordinary", name: "Ordinary", getStreams: () => {
+        regularCalls++;
+        return [stream("https://media.example.test/ordinary.mp4")];
+      } }
+    ];
+    const cold = await getSharedMasterBuild("movie", refreshId, refreshEntries).fullPromise;
+    assert.equal(cold.length, 1);
+    const warm = await getQualityBandStreams("movie", refreshId, refreshEntries, "1080");
+    assert.equal(warm.length, 1);
+    assert.equal(refreshCalls, 1);
+
+    const refresh = { requestHeaders: { "cache-control": "no-cache" } };
+    const [first, second] = await Promise.all([
+      getQualityBandStreams("movie", refreshId, refreshEntries, "1080", refresh),
+      getQualityBandStreams("movie", refreshId, refreshEntries, "1080", refresh)
+    ]);
+    for (const streams of [first, second]) {
+      assert.equal(streams.filter((s) => s.behaviorHints.doomProviderId === "pengu").length, 1);
+      assert.equal(streams.filter((s) => s.behaviorHints.doomProviderId === "ordinary").length, 1);
+    }
+    const recover = await getQualityBandStreams("movie", refreshId, refreshEntries, "1080");
+    assert.deepEqual(recover.map((s) => s.url).sort(), first.map((s) => s.url).sort());
+    assert.equal(regularCalls, 1);
+    assert.equal(refreshCalls, 2);
   } finally {
     releaseSlowProbe();
     global.fetch = before;
