@@ -1411,6 +1411,7 @@ async function filterPlayableStreams(streams, options = {}) {
         });
         if (probe.ok) {
           filtered.push(stream);
+          options.onPlayable?.(stream);
         } else {
           console.log(`[Stream probe] Rejected unplayable source: ${stream.name}`);
         }
@@ -2306,7 +2307,7 @@ function startProviderCollection(parsed, tmdbId, mediaInfo, entries, requestCont
   ));
 
   const donePromise = Promise.allSettled(tasks).then(() => results);
-  return { results, donePromise };
+  return { results, tasks, donePromise };
 }
 
 function streamsFromProviderResults(providerResults, options = {}) {
@@ -2434,7 +2435,8 @@ async function finalizeStreams(providerResults, options = {}) {
     mediaInfo: options.mediaInfo,
     parsed: options.parsed,
     probeOnlyRequired: options.probeOnlyRequired,
-    probeTimeoutMs: options.probeTimeoutMs
+    probeTimeoutMs: options.probeTimeoutMs,
+    onPlayable: options.onPlayable
   });
   const qualityMatchedStreams = filterStreamsByQualityBand([...playableStreams, ...passthrough], options.qualityBand);
   return sortStreams(qualityMatchedStreams, { qualityBand: options.qualityBand });
@@ -2499,6 +2501,35 @@ function finalizedBuild(type, id, entries, requestContext = {}, options = {}) {
   const buildStatePromise = startStreamBuild(type, id, entries, {
     requestHeaders: requestContext.requestHeaders || {}
   });
+  const penguIndex = entries.findIndex((provider) => provider.id === "pengu");
+  const readyPenguStreams = [];
+  const penguPromise = penguIndex === -1 ? Promise.resolve([]) : buildStatePromise
+    .then(async (state) => {
+      if (!state) return [];
+      await state.tasks[penguIndex];
+      return finalizeStreams([state.results[penguIndex]], {
+        logFailures: options.logFailures !== false,
+        mediaInfo: state.mediaInfo,
+        parsed: state.parsed,
+        providerEntries: [entries[penguIndex]],
+        probeOnlyRequired: true,
+        probeTimeoutMs: options.probeTimeoutMs,
+        qualityBand: options.qualityBand || "",
+        onPlayable(stream) {
+          if (!options.qualityBand || streamQualityBand(stream) === options.qualityBand) {
+            readyPenguStreams.push(stream);
+          }
+        }
+      });
+    })
+    .catch((error) => {
+      console.error(`[Pengu] Verification failed: ${error.message || error}`);
+      return readyPenguStreams.slice();
+    });
+  // Keep result indices aligned for provider errors, but probe PNG only once.
+  const sharedResults = (state) => state.results.map((result, index) => (
+    index === penguIndex ? undefined : result
+  ));
 
   const fullPromise = buildStatePromise
     .then(async (state) => {
@@ -2506,7 +2537,7 @@ function finalizedBuild(type, id, entries, requestContext = {}, options = {}) {
         return [];
       }
       await state.donePromise;
-      return finalizeStreams(state.results, {
+      const regular = finalizeStreams(sharedResults(state), {
         logFailures: options.logFailures !== false,
         mediaInfo: state.mediaInfo,
         parsed: state.parsed,
@@ -2515,13 +2546,15 @@ function finalizedBuild(type, id, entries, requestContext = {}, options = {}) {
         probeTimeoutMs: options.probeTimeoutMs,
         qualityBand: options.qualityBand || ""
       });
+      const [streams, penguStreams] = await Promise.all([regular, penguPromise]);
+      return sortStreams([...streams, ...penguStreams]);
     })
     .catch((error) => {
       console.error(`[Stream build] ${options.cacheKey || `${type}:${id}`}: ${error.message || error}`);
       return [];
     });
 
-  const makeFastPromise = (fallbackToFull) => buildStatePromise
+  const firstBatchPromise = buildStatePromise
     .then(async (state) => {
       if (!state) {
         return [];
@@ -2532,7 +2565,7 @@ function finalizedBuild(type, id, entries, requestContext = {}, options = {}) {
         delay(Math.max(0, options.fastWaitMs || STREAM_FAST_PROVIDER_WAIT_MS))
       ]);
 
-      const providerResults = state.results.filter(Boolean);
+      const providerResults = sharedResults(state);
       const fastProbeTimeoutMs = options.fastProbeTimeoutMs || (
         entries.some((provider) => provider.id.startsWith("flix_streams_"))
           ? STREAM_PROBE_TIMEOUT_MS
@@ -2548,21 +2581,25 @@ function finalizedBuild(type, id, entries, requestContext = {}, options = {}) {
         qualityBand: options.qualityBand || ""
       });
 
-      if (streams.length > 0) {
-        console.log(`[Stream fast] Returning ${streams.length} early streams for ${options.cacheKey || `${type}:${id}`}`);
-        return streams;
+      const ready = sortStreams([...streams, ...readyPenguStreams]);
+      if (ready.length > 0) {
+        console.log(`[Stream fast] Returning ${ready.length} early streams for ${options.cacheKey || `${type}:${id}`}`);
       }
-
-      return fallbackToFull ? fullPromise : [];
+      return ready;
     })
     .catch((error) => {
       console.error(`[Stream fast] ${options.cacheKey || `${type}:${id}`}: ${error.message || error}`);
-      return fallbackToFull ? fullPromise : [];
+      return [];
     });
-  const fastPromise = makeFastPromise(true);
-  const firstBatchPromise = makeFastPromise(false);
+  const fastPromise = firstBatchPromise.then((streams) => streams.length > 0 ? streams : fullPromise);
 
-  return { fullPromise, fastPromise, firstBatchPromise };
+  return { fullPromise, fastPromise, firstBatchPromise, readyPenguStreams };
+}
+
+function includeReadyPengu(streams, readyPenguStreams) {
+  if (!readyPenguStreams.length) return streams;
+  const included = new Set(streams);
+  return [...streams, ...readyPenguStreams.filter((stream) => !included.has(stream))];
 }
 
 function qualitySortFromStreams(streams, qualityBand) {
@@ -2636,6 +2673,7 @@ function getSharedMasterBuild(type, id, entries, requestContext = {}) {
   let sharedFullPromise = Promise.resolve([]);
   let sharedFastPromise = sharedFullPromise;
   let sharedFirstBatchPromise = sharedFullPromise;
+  let readyPenguStreams = [];
   const cachedSharedStreams = sharedEntries.length ? cachedStreams(sharedKey) : null;
 
   if (cachedSharedStreams) {
@@ -2649,6 +2687,7 @@ function getSharedMasterBuild(type, id, entries, requestContext = {}) {
     sharedFullPromise = inflight.fullPromise;
     sharedFastPromise = inflight.fastPromise || inflight.fullPromise;
     sharedFirstBatchPromise = inflight.firstBatchPromise || sharedFastPromise;
+    readyPenguStreams = inflight.readyPenguStreams;
   } else if (sharedEntries.length > 0) {
     const sharedBuild = finalizedBuild(type, id, sharedEntries, requestContext, {
       cacheKey: sharedKey,
@@ -2665,17 +2704,20 @@ function getSharedMasterBuild(type, id, entries, requestContext = {}) {
       });
     sharedFastPromise = sharedBuild.fastPromise;
     sharedFirstBatchPromise = sharedBuild.firstBatchPromise;
+    readyPenguStreams = sharedBuild.readyPenguStreams;
     streamInflight.set(sharedKey, {
       fullPromise: sharedFullPromise,
       fastPromise: sharedFastPromise,
-      firstBatchPromise: sharedFirstBatchPromise
+      firstBatchPromise: sharedFirstBatchPromise,
+      readyPenguStreams
     });
   }
 
   return {
     fullPromise: sharedFullPromise,
     fastPromise: sharedFastPromise,
-    firstBatchPromise: sharedFirstBatchPromise
+    firstBatchPromise: sharedFirstBatchPromise,
+    readyPenguStreams
   };
 }
 
@@ -2713,7 +2755,9 @@ async function getQualityBandStreams(type, id, entries, qualityBand, requestCont
     [sharedStreamsPromise, liveStreamsPromise],
     QUALITY_RESPONSE_WAIT_MS
   );
-  const initialQualityStreams = qualitySortFromStreams(initialStreams, qualityBand);
+  const initialQualityStreams = qualitySortFromStreams(
+    includeReadyPengu(initialStreams, sharedBuild.readyPenguStreams), qualityBand
+  );
   if (initialQualityStreams.length > 0) {
     return initialQualityStreams;
   }
@@ -2725,7 +2769,7 @@ async function getQualityBandStreams(type, id, entries, qualityBand, requestCont
     [liveBuild.fullPromise, sharedBuild.fullPromise],
     QUALITY_EMPTY_FALLBACK_WAIT_MS
   );
-  return qualitySortFromStreams(fallbackStreams, qualityBand);
+  return qualitySortFromStreams(includeReadyPengu(fallbackStreams, sharedBuild.readyPenguStreams), qualityBand);
 }
 
 async function getStreams(type, id, options = {}) {
@@ -2776,18 +2820,19 @@ async function getStreams(type, id, options = {}) {
         QUALITY_EMPTY_FALLBACK_WAIT_MS
       );
       if (liveFallbackStreams.length > 0) {
-        return sortStreams([...initialStreams, ...liveFallbackStreams]);
+        return sortStreams(includeReadyPengu([...initialStreams, ...liveFallbackStreams], sharedBuild.readyPenguStreams));
       }
     }
-    if (initialStreams.length > 0) {
-      return sortStreams(initialStreams);
+    const ready = includeReadyPengu(initialStreams, sharedBuild.readyPenguStreams);
+    if (ready.length > 0) {
+      return sortStreams(ready);
     }
 
     const fallbackStreams = await collectFirstNonEmptyStreamsByDeadline(
       [liveBuild.fullPromise, sharedBuild.fullPromise],
       QUALITY_EMPTY_FALLBACK_WAIT_MS
     );
-    return sortStreams(fallbackStreams);
+    return sortStreams(includeReadyPengu(fallbackStreams, sharedBuild.readyPenguStreams));
   }
 
   const hasTorbox = entriesHaveProvider(entries, "torbox");
