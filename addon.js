@@ -101,33 +101,21 @@ const sportsFreeLiveCatalogs = [
 ];
 const nuvioLiveCatalogs = [
   {
-    extra: [
-      { isRequired: false, name: "search" }
-    ],
     id: "nuvio_sports_live",
     name: "Nuvio - Live Now",
     type: "tv"
   },
   {
-    extra: [
-      { isRequired: false, name: "search" }
-    ],
     id: "nuvio_sports_football",
     name: "Nuvio - Soccer",
     type: "tv"
   },
   {
-    extra: [
-      { isRequired: false, name: "search" }
-    ],
     id: "nuvio_sports_cricket",
     name: "Nuvio - Cricket",
     type: "tv"
   },
   {
-    extra: [
-      { isRequired: false, name: "search" }
-    ],
     id: "nuvio_sports_networks",
     name: "Nuvio - 24/7 Sports TV",
     type: "tv"
@@ -554,6 +542,9 @@ async function filterNuvioLiveStreams(streams) {
 }
 
 async function getLiveCatalog(type, id, extra = "") {
+  if (new URLSearchParams(extra).has("search")) {
+    return { metas: [] };
+  }
   if (isSportsFreeCatalog(type, id)) {
     return fetchSportsFreeJson("catalog", type, id, extra);
   }

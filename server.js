@@ -351,7 +351,10 @@ const server = http.createServer(async (request, response) => {
 
     const catalogRequest = parseCatalogPath(url.pathname);
     if (catalogRequest) {
-      const catalog = await getCatalog(catalogRequest.scope, catalogRequest.type, catalogRequest.id, catalogRequest.extra);
+      const extra = catalogRequest.scope === "live" && url.searchParams.has("search")
+        ? "search="
+        : catalogRequest.extra;
+      const catalog = await getCatalog(catalogRequest.scope, catalogRequest.type, catalogRequest.id, extra);
       if (!catalog) {
         sendJson(response, 404, { error: "Catalog not found" });
         return;
