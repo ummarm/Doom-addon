@@ -2,6 +2,8 @@
 
 const PROVIDER_NAME = "Pengu";
 const RETRYABLE_STATUS = new Set([502, 503, 504]);
+const FIRST_REQUEST_TIMEOUT_MS = 7000;
+const RETRY_REQUEST_TIMEOUT_MS = 17000;
 const DEFAULT_MANIFEST_URL = "https://pengu.uk/%7B%22auth_token%22%3A%22o_3vfdJwk6Ala9JE5xNBzfU1FJqFicrxlAupcRebxV8%22%7D/manifest.json";
 
 function normalizeBaseUrl(raw) {
@@ -48,18 +50,24 @@ async function fetchPenguStreams(imdbId, tmdbId, mediaType, season, episode) {
     },
     redirect: "follow"
   };
-  let response = await fetch(url, options);
-  if (RETRYABLE_STATUS.has(response.status)) {
-    await response.body?.cancel().catch(() => {});
-    response = await fetch(url, options);
+  async function request(timeoutMs) {
+    const response = await fetch(url, { ...options, signal: AbortSignal.timeout(timeoutMs) });
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => {});
+      const error = new Error(`${PROVIDER_NAME} returned HTTP ${response.status}`);
+      error.retryable = RETRYABLE_STATUS.has(response.status);
+      throw error;
+    }
+    const payload = await response.json();
+    return Array.isArray(payload.streams) ? payload.streams : [];
   }
 
-  if (!response.ok) {
-    throw new Error(`${PROVIDER_NAME} returned HTTP ${response.status}`);
+  try {
+    return await request(FIRST_REQUEST_TIMEOUT_MS);
+  } catch (error) {
+    if (!error.retryable && error.name !== "TimeoutError" && !/fetch failed/i.test(error.message || "")) throw error;
+    return request(RETRY_REQUEST_TIMEOUT_MS);
   }
-
-  const payload = await response.json();
-  return Array.isArray(payload.streams) ? payload.streams : [];
 }
 
 async function getStreams(tmdbId, mediaType = "movie", season = null, episode = null, imdbId = "") {

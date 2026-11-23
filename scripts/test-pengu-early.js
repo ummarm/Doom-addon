@@ -18,8 +18,8 @@ const addon = new Module(filename, module);
 addon.filename = filename;
 addon.paths = Module._nodeModulePaths(path.dirname(filename));
 addon._compile(fs.readFileSync(filename, "utf8") +
-  "\nmodule.exports.test = { getQualityBandStreams, getSharedMasterBuild, interleavePenguQualities };", filename);
-const { getQualityBandStreams, getSharedMasterBuild, interleavePenguQualities } = addon.exports.test;
+  "\nmodule.exports.test = { getQualityBandStreams, getSharedMasterBuild, interleavePenguQualities, filterPlayableStreams };", filename);
+const { getQualityBandStreams, getSharedMasterBuild, interleavePenguQualities, filterPlayableStreams } = addon.exports.test;
 
 async function check() {
   const id = "tmdb:126400";
@@ -116,6 +116,43 @@ async function check() {
       : Response.json({ streams: [stream(good)] });
     assert.equal((await pengu.getStreams("126400")).length, 1);
     assert.equal(upstreamCalls, 2);
+    upstreamCalls = 0;
+    global.fetch = async (_url, { signal }) => {
+      assert.ok(signal instanceof AbortSignal);
+      if (++upstreamCalls === 1) throw new DOMException("Request timed out", "TimeoutError");
+      return Response.json({ streams: [stream(good)] });
+    };
+    assert.equal((await pengu.getStreams("126400")).length, 1);
+    assert.equal(upstreamCalls, 2);
+
+    const candidates = Array.from({ length: 25 }, (_, index) => ({
+      url: `https://media.example.test/${index}.mp4`,
+      name: `PNG test ${index}`,
+      behaviorHints: { doomProviderId: "pengu" }
+    }));
+    const starts = [];
+    const seen = new Map();
+    global.fetch = async (url, { headers }) => {
+      const index = Number(new URL(url).pathname.match(/\d+/)[0]);
+      const [start, end] = headers.Range.match(/\d+/g).map(Number);
+      if (start === 0) {
+        starts.push(index);
+        const attempts = (seen.get(index) || 0) + 1;
+        seen.set(index, attempts);
+        if (index === 0 && attempts === 1) return new Response(null, { status: 502 });
+        if (index === 1 && attempts === 1) throw new DOMException("Probe timed out", "TimeoutError");
+      } else if (index === 2) {
+        return new Response(bytes, { status: 200, headers: { "content-type": "video/mp4" } });
+      }
+      return new Response(bytes, { status: 206, headers: {
+        "content-type": "video/mp4", "content-range": `bytes ${start}-${end}/4000000`
+      } });
+    };
+    const verified = await filterPlayableStreams(candidates, { probeOnlyRequired: true, quickPenguBatch: true });
+    assert.deepEqual(starts.slice(0, 25), candidates.map((_, index) => index));
+    assert.deepEqual(starts.slice(25).sort(), [0, 1]);
+    assert.equal(verified.length, 24);
+    assert.ok(!verified.includes(candidates[2]));
   } finally {
     releaseSlowProbe();
     global.fetch = before;

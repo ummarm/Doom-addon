@@ -10,6 +10,10 @@ const TMDB_API_KEY = process.env.TMDB_API_KEY || "439c478a771f35c05022f9feabcca0
 const DEFAULT_TIMEOUT_MS = Number(process.env.PROVIDER_TIMEOUT_MS || 45000);
 const STREAM_PROBE_TIMEOUT_MS = Number(process.env.STREAM_PROBE_TIMEOUT_MS || 8000);
 const STREAM_PROBE_CONCURRENCY = Number(process.env.STREAM_PROBE_CONCURRENCY || 6);
+const PENGU_LARGE_BATCH_SIZE = 24;
+const PENGU_QUICK_PROBE_TIMEOUT_MS = 4000;
+const PENGU_QUICK_PROBE_CONCURRENCY = 8;
+const PENGU_TRANSIENT_PROBE_STATUS = new Set([502, 503, 504]);
 const STREAM_CACHE_TTL_MS = Number(process.env.STREAM_CACHE_TTL_MS || 10 * 60 * 1000);
 const STREAM_CACHE_MAX_ENTRIES = Number(process.env.STREAM_CACHE_MAX_ENTRIES || 100);
 const PENGU_REFRESH_COOLDOWN_MS = 30 * 1000;
@@ -1311,7 +1315,8 @@ async function probeStream(stream, options = {}) {
   }
 
   const timeoutMs = options.timeoutMs || STREAM_PROBE_TIMEOUT_MS;
-  const fetchProbe = (requestOptions) => fetch(stream.url, streamProviderId(stream) === "pengu"
+  const isPengu = streamProviderId(stream) === "pengu";
+  const fetchProbe = (requestOptions) => fetch(stream.url, isPengu
     ? { ...requestOptions, signal: AbortSignal.timeout(timeoutMs) }
     : requestOptions);
   const requireSeekable = streamRequiresProbe(stream);
@@ -1335,6 +1340,10 @@ async function probeStream(stream, options = {}) {
     timeoutMs,
     `${stream.name} probe`
   );
+  if (isPengu && PENGU_TRANSIENT_PROBE_STATUS.has(getResponse.status)) {
+    await getResponse.body?.cancel().catch(() => {});
+    return { ok: false, retryable: true };
+  }
   if (!responseFilenameMatchesRequestedMedia(getResponse, stream, mediaInfo, parsed)) {
     return { ok: false };
   }
@@ -1356,6 +1365,10 @@ async function probeStream(stream, options = {}) {
           timeoutMs,
           `${stream.name} seek probe`
         );
+        if (isPengu && PENGU_TRANSIENT_PROBE_STATUS.has(seekResponse.status)) {
+          await seekResponse.body?.cancel().catch(() => {});
+          return { ok: false, retryable: true };
+        }
         const seekSample = await responseSample(seekResponse);
         if (requireFileSeek && (seekResponse.status !== 206
             || contentRangeStart(seekResponse) !== offset
@@ -1393,46 +1406,62 @@ async function probeStream(stream, options = {}) {
 
 async function filterPlayableStreams(streams, options = {}) {
   const filtered = [];
-  let nextIndex = 0;
   const probeOnlyRequired = Boolean(options.probeOnlyRequired);
   const probeTimeoutMs = options.probeTimeoutMs || STREAM_PROBE_TIMEOUT_MS;
+  const quickPenguBatch = options.quickPenguBatch && streams.length >= PENGU_LARGE_BATCH_SIZE;
 
-  async function worker() {
-    while (nextIndex < streams.length) {
-      const stream = streams[nextIndex];
-      nextIndex += 1;
-      try {
-        if (probeOnlyRequired && !streamRequiresProbe(stream)) {
-          if (isFastAcceptableStream(stream)) {
-            filtered.push(stream);
-          } else {
-            console.log(`[Stream probe] Rejected unlikely source: ${stream.name}`);
-          }
-          continue;
-        }
-
-        const probe = await probeStream(stream, {
-          timeoutMs: probeTimeoutMs,
-          mediaInfo: options.mediaInfo,
-          parsed: options.parsed
-        });
-        if (probe.ok) {
+  async function probeCandidate(stream, timeoutMs, retry) {
+    try {
+      if (probeOnlyRequired && !streamRequiresProbe(stream)) {
+        if (isFastAcceptableStream(stream)) {
           filtered.push(stream);
-          options.onPlayable?.(stream);
         } else {
-          console.log(`[Stream probe] Rejected unplayable source: ${stream.name}`);
+          console.log(`[Stream probe] Rejected unlikely source: ${stream.name}`);
         }
-      } catch (error) {
+        return;
+      }
+
+      const probe = await probeStream(stream, {
+        timeoutMs,
+        mediaInfo: options.mediaInfo,
+        parsed: options.parsed
+      });
+      if (probe.ok) {
+        filtered.push(stream);
+        options.onPlayable?.(stream);
+      } else if (retry && probe.retryable) {
+        retry.push(stream);
+      } else {
+        console.log(`[Stream probe] Rejected unplayable source: ${stream.name}`);
+      }
+    } catch (error) {
+      if (retry && (error.name === "TimeoutError" || /timed out|fetch failed/i.test(error.message || ""))) {
+        retry.push(stream);
+      } else {
         console.log(`[Stream probe] Rejected ${stream.name}: ${error.message || error}`);
       }
     }
   }
 
-  const workers = Array.from(
-    { length: Math.min(STREAM_PROBE_CONCURRENCY, streams.length) },
-    () => worker()
-  );
-  await Promise.all(workers);
+  async function runPass(candidates, concurrency, timeoutMs, retry) {
+    let nextIndex = 0;
+    async function worker() {
+      while (nextIndex < candidates.length) {
+        const stream = candidates[nextIndex++];
+        await probeCandidate(stream, timeoutMs, retry);
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(concurrency, candidates.length) }, worker));
+  }
+
+  if (quickPenguBatch) {
+    // Give every quality a chance before spending a full timeout on stalled links.
+    const retry = [];
+    await runPass(streams, PENGU_QUICK_PROBE_CONCURRENCY, Math.min(probeTimeoutMs, PENGU_QUICK_PROBE_TIMEOUT_MS), retry);
+    await runPass(retry, STREAM_PROBE_CONCURRENCY, probeTimeoutMs);
+  } else {
+    await runPass(streams, STREAM_PROBE_CONCURRENCY, probeTimeoutMs);
+  }
   return filtered;
 }
 
@@ -2443,7 +2472,8 @@ async function finalizeStreams(providerResults, options = {}) {
     parsed: options.parsed,
     probeOnlyRequired: options.probeOnlyRequired,
     probeTimeoutMs: options.probeTimeoutMs,
-    onPlayable: options.onPlayable
+    onPlayable: options.onPlayable,
+    quickPenguBatch: options.quickPenguBatch
   });
   const qualityMatchedStreams = filterStreamsByQualityBand([...playableStreams, ...passthrough], options.qualityBand);
   return sortStreams(qualityMatchedStreams, { qualityBand: options.qualityBand });
@@ -2534,6 +2564,7 @@ async function verifyPengu(state, index, provider, ready, options = {}) {
     providerEntries: [provider],
     probeOnlyRequired: true,
     probeTimeoutMs: options.probeTimeoutMs || STREAM_PROBE_TIMEOUT_MS + 2000,
+    quickPenguBatch: true,
     qualityBand: options.qualityBand || "",
     onPlayable(stream) {
       if (!options.qualityBand || streamQualityBand(stream) === options.qualityBand) {
