@@ -90,7 +90,8 @@ Provider-group install URLs are also exposed without changing the main add-on:
 http://localhost:7000/addons/murph/manifest.json        # Umbrella M
 http://localhost:7000/addons/yoruix/manifest.json       # Umbrella Y
 http://localhost:7000/addons/d3adlyrocket/manifest.json # Umbrella D
-http://localhost:7000/addons/flixnest/manifest.json     # Umbrella F
+http://localhost:7000/addons/asura/manifest.json        # Umbrella A
+http://localhost:7000/addons/flixnest/manifest.json     # Umbrella F (disabled)
 http://localhost:7000/addons/mediafusion/manifest.json  # Umbrella MF
 http://localhost:7000/addons/aiostreams/manifest.json   # Umbrella AIO
 http://localhost:7000/addons/quality-4k/manifest.json   # Umbrella 4K
@@ -126,11 +127,12 @@ default can be overridden if the token changes:
 FLIX_STREAMS_MANIFEST_URL=https://flixnest.app/flix-streams/u/<token>/manifest.json npm start
 ```
 
-The Flixnest group currently wraps Emby/Media Lib, MkvCinemas, LotusVault,
-ArchiveVault, UHDMovies, and any newly enabled Flix-Streams results that are
-not already covered by a named wrapper.
-VegaMovies stays registered but disabled because those links were previously
-marked unreliable.
+Flixnest is currently disabled. Its provider entries and configuration are kept
+for re-enabling later.
+
+Asura Synthesis is a separate upstream. Only VegaMovies, MoviesDrive, CineFreak,
+4KHDHub, HDHub4u, and UHDMovies are enabled from Asura. They are included in the
+main and quality add-ons and also available separately as Umbrella A.
 
 MediaFusion uses the configured MediaFusion manifest URL. The checked-in default
 can be overridden if the configured add-on URL changes:

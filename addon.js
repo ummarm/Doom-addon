@@ -127,6 +127,14 @@ const nuvioLiveCatalogs = [
   }
 ];
 const liveCatalogs = [...sportsFreeLiveCatalogs, ...nuvioLiveCatalogs];
+const ASURA_PROVIDER_CODES = {
+  vegamovies_asura: "VG A",
+  moviesdrive_asura: "MD A",
+  cinefreak_asura: "CF A",
+  "4khdhub_asura": "4KHH A",
+  hdhub4u_asura: "HDHU A",
+  uhdmovies_asura: "UHD A"
+};
 
 const providerEntries = providerRegistry.scrapers
   .filter((provider) => provider.enabled)
@@ -151,6 +159,10 @@ const addonGroups = {
       "uhdmovies_yoruix",
       "movieblast_yoruix"
     ]
+  },
+  asura: {
+    name: "Umbrella A",
+    providerIds: Object.keys(ASURA_PROVIDER_CODES)
   },
   d3adlyrocket: {
     name: "Umbrella D",
@@ -1144,7 +1156,7 @@ function streamProviderId(stream) {
 }
 
 function isHdhubProviderId(providerId) {
-  return /\b(?:4khdhub|hdhub4u|hdhub)\b/i.test(String(providerId || ""));
+  return /\b(?:4khdhub|hdhub4u|hdhub)(?:_asura)?\b/i.test(String(providerId || ""));
 }
 
 function isHdhubStream(stream) {
@@ -1272,6 +1284,9 @@ function streamRequiresProbe(stream) {
   }
 
   const providerId = streamProviderId(stream);
+  if (Object.hasOwn(ASURA_PROVIDER_CODES, providerId)) {
+    return true;
+  }
   return Boolean(stream.behaviorHints && [
     "4khdhubnew",
     "4khdhub_yoruix",
@@ -1466,6 +1481,7 @@ async function filterPlayableStreams(streams, options = {}) {
 }
 
 const UMBRELLA_PROVIDER_CODES = {
+  ...ASURA_PROVIDER_CODES,
   "4khdhub": "4KHH DR",
   "4khdhubnew": "4KHHN DR",
   "4khdhubtv": "4KHH DR",
@@ -2151,7 +2167,7 @@ function shouldKeepProviderStream(rawStream, provider) {
     return /\b1080p\b/i.test(text);
   }
 
-  if (provider.id === "vegamovies") {
+  if (provider.id === "vegamovies" || provider.id === "vegamovies_asura") {
     const rank = qualityRank(text);
     return rank >= 2 && rank <= 5 && /\b(?:hindi|hin|english|eng|dual|multi)\b/i.test(text);
   }
@@ -2223,7 +2239,10 @@ function normalizeStream(rawStream, provider, mediaInfo) {
 
   // Pengu sometimes supplies only quality/codec metadata as the filename;
   // retain its real title description for matching, not the generated card.
-  if (["pengu", "cncverse"].includes(provider.id) && /^(?:4k|(?:2160|1440|1080|720|480|360)p)/i.test(filename)) {
+  if (Object.hasOwn(ASURA_PROVIDER_CODES, provider.id)) {
+    originalMatchEvidence.set(normalizedStream, [filename, rawStream.name, rawStream.title, rawStream.description]
+      .filter(Boolean).join(" "));
+  } else if (["pengu", "cncverse"].includes(provider.id) && /^(?:4k|(?:2160|1440|1080|720|480|360)p)/i.test(filename)) {
     originalMatchEvidence.set(normalizedStream, [
       filename, rawStream.title, rawStream.description
     ].filter(Boolean).join(" "));

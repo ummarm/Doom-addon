@@ -33,6 +33,10 @@ D3ADLYROCKET_MANIFEST_URL = "https://raw.githubusercontent.com/D3adlyRocket/All-
 YORUIX_UPSTREAM_RAW_BASE = "https://raw.githubusercontent.com/yoruix/nuvio-providers/main"
 YORUIX_UPSTREAM_TREE_API = "https://api.github.com/repos/yoruix/nuvio-providers/git/trees/main?recursive=1"
 YORUIX_MANIFEST_URL = "https://raw.githubusercontent.com/yoruix/nuvio-providers/refs/heads/main/manifest.json"
+ASURA_MANIFEST_URL = "https://raw.githubusercontent.com/PirateZoro9/asura-providers/refs/heads/main/manifest.json"
+ASURA_UPSTREAM_RAW_BASE = ASURA_MANIFEST_URL.rsplit("/", 1)[0]
+ASURA_UPSTREAM_TREE_API = "https://api.github.com/repos/PirateZoro9/asura-providers/git/trees/main?recursive=1"
+ASURA_PROVIDER_IDS = ("vegamovies", "moviesdrive", "cinefreak", "4khdhub", "hdhub4u", "uhdmovies")
 FLIX_STREAMS_MANIFEST_URL = "https://flixnest.app/flix-streams/u/6p9xzp78nunz/manifest.json"
 MURPH_MANIFEST_URL = "https://badboysxs-morpheus.hf.space/manifest.json"
 WEBSTREAMRMBG_REPOSITORY_URL = "https://github.com/newman2x/WebStreamrMBG"
@@ -48,6 +52,7 @@ DEFAULT_UPSTREAMS = {
     "manifests": {
         "d3adlyrocket": D3ADLYROCKET_MANIFEST_URL,
         "yoruix": YORUIX_MANIFEST_URL,
+        "asura": ASURA_MANIFEST_URL,
         "flixnest": FLIX_STREAMS_MANIFEST_URL,
         "murph": MURPH_MANIFEST_URL,
         "webstreamrmbg": WEBSTREAMRMBG_MANIFEST_URL,
@@ -770,6 +775,9 @@ PROVIDERS = (
     Provider("movieblast_yoruix", ("providers/movieblast.js",), "providers/movieblast_yoruix.js", ("movieblast", "yoruix"), YORUIX_UPSTREAM_RAW_BASE, YORUIX_UPSTREAM_TREE_API),
     Provider("moviesdrive", ("src/providers/moviesdrive.js", "providers/moviesdrive.js"), "providers/moviesdrive.js", ("moviesdrive",)),
     Provider("streamflix", ("providers/streamflix.js",), "providers/streamflix.js", ("streamflix",)),
+    *(Provider(f"{name}_asura", (f"providers/{name}.js",), f"providers/{name}_asura.js",
+               upstream_raw_base=ASURA_UPSTREAM_RAW_BASE, upstream_tree_api=ASURA_UPSTREAM_TREE_API)
+      for name in ASURA_PROVIDER_IDS),
 )
 MURPH_WRAPPER_IDS = {"4khdhub_murph", "hdhub4u_murph", "moviebox_murph", "movies4u_murph"}
 PAUSED_UPSTREAM_PROVIDER_IDS = {"streamflix"}
@@ -832,6 +840,18 @@ def fetch_upstream_manifest_paths(manifest_url: str) -> list[str]:
     return paths
 
 
+def fetch_asura_manifest_paths(manifest_url: str) -> dict[str, str]:
+    payload = fetch_json(manifest_url)
+    paths = {}
+    for scraper in payload.get("scrapers", []) if isinstance(payload, dict) else []:
+        if not isinstance(scraper, dict) or scraper.get("id") not in ASURA_PROVIDER_IDS:
+            continue
+        filename = scraper.get("filename")
+        if isinstance(filename, str) and re.fullmatch(r"(?:[\w-]+/)*[\w.-]+\.js", filename):
+            paths[f"{scraper['id']}_asura"] = filename
+    return paths
+
+
 def load_upstreams() -> dict:
     upstreams = json.loads(json.dumps(DEFAULT_UPSTREAMS))
     if not UPSTREAMS_PATH.exists():
@@ -865,6 +885,8 @@ def manifest_url_for_provider(provider: Provider, upstreams: dict) -> str:
     manifests = upstreams.get("manifests", {}) if isinstance(upstreams, dict) else {}
     if provider.upstream_raw_base == YORUIX_UPSTREAM_RAW_BASE:
         return manifests.get("yoruix", YORUIX_MANIFEST_URL)
+    if provider.upstream_raw_base == ASURA_UPSTREAM_RAW_BASE:
+        return manifests.get("asura", ASURA_MANIFEST_URL)
     if provider.upstream_raw_base == D3ADLYROCKET_UPSTREAM_RAW_BASE:
         return manifests.get("d3adlyrocket", D3ADLYROCKET_MANIFEST_URL)
     return ""
@@ -1043,6 +1065,11 @@ def patch_moviebox_crypto_source(text: str) -> str:
 
 
 def transform_source(provider: Provider, text: str) -> str:
+    if provider.upstream_raw_base == ASURA_UPSTREAM_RAW_BASE:
+        # Hosted validation runs in addon.js; retain Asura's own domains and stream metadata.
+        if not re.search(r"\bfunction\s+getStreams\s*\(", text):
+            raise RuntimeError("Asura source no longer defines getStreams")
+        return text.rstrip() + "\n"
     if provider.scraper_id in {"4khdhub", "4khdhubtv", "4khdhubnew", "hdhub4u", "4khdhub_yoruix", "hdhub4u_yoruix"} and "DOMAINS_URL" in text:
         text = patch_domain_source(text)
     elif provider.scraper_id == "vegamovies":
@@ -1335,6 +1362,12 @@ def main() -> int:
     upstream_manifest_cache: dict[str, list[str]] = {}
     changed_domain_ids, domain_warnings = sync_domains(upstream_tree_cache)
     sync_warnings.extend(domain_warnings)
+    asura_manifest_url = manifests.get("asura", ASURA_MANIFEST_URL)
+    try:
+        asura_paths = fetch_asura_manifest_paths(asura_manifest_url)
+    except Exception as exc:
+        asura_paths = {}
+        sync_warnings.append(f"Asura manifest unavailable; keeping existing providers: {exc}")
 
     for provider in PROVIDERS:
         if provider.scraper_id in PAUSED_UPSTREAM_PROVIDER_IDS:
@@ -1342,7 +1375,13 @@ def main() -> int:
             continue
 
         manifest_url = manifest_url_for_provider(provider, upstreams)
-        if manifest_url:
+        if provider.upstream_raw_base == ASURA_UPSTREAM_RAW_BASE:
+            asura_path = asura_paths.get(provider.scraper_id)
+            if not asura_path:
+                sync_warnings.append(f"No matching Asura manifest file for `{provider.scraper_id}`; keeping existing provider.")
+                continue
+            paths = [asura_path]
+        elif manifest_url:
             try:
                 upstream_tree_paths = upstream_manifest_cache.get(manifest_url)
                 if upstream_tree_paths is None:
@@ -1387,7 +1426,7 @@ def main() -> int:
         resolved_provider = None
         upstream_text = None
 
-        for upstream_path in candidate_upstream_paths(provider, upstream_tree_paths):
+        for upstream_path in paths if provider.upstream_raw_base == ASURA_UPSTREAM_RAW_BASE else candidate_upstream_paths(provider, upstream_tree_paths):
             try:
                 upstream_text = fetch_text(f"{provider.upstream_raw_base}/{upstream_path}")
                 resolved_provider = ResolvedProvider(provider, upstream_path)
@@ -1448,7 +1487,9 @@ def main() -> int:
     webstreamrmbg_manifest_url = manifests.get("webstreamrmbg", WEBSTREAMRMBG_MANIFEST_URL)
     torbox_manifest_url = manifests.get("torbox", TORBOX_MANIFEST_URL)
     pengu_manifest_url = manifests.get("pengu", PENGU_MANIFEST_URL)
-    sync_warnings.extend(check_manifest_available("Flixnest", flixnest_manifest_url))
+    if any(p.get("enabled") and str(p.get("id", "")).startswith("flix_streams_")
+           for p in load_provider_registry().get("scrapers", [])):
+        sync_warnings.extend(check_manifest_available("Flixnest", flixnest_manifest_url))
     sync_warnings.extend(check_manifest_available("WebStreamrMBG", webstreamrmbg_manifest_url))
     sync_warnings.extend(check_manifest_available("Torbox", torbox_manifest_url))
     sync_warnings.extend(check_manifest_available("Pengu", pengu_manifest_url))
@@ -1484,6 +1525,7 @@ def main() -> int:
         "Sources:",
         f"- `{manifests.get('d3adlyrocket', D3ADLYROCKET_MANIFEST_URL)}`",
         f"- `{manifests.get('yoruix', YORUIX_MANIFEST_URL)}`",
+        f"- `{asura_manifest_url}`",
         f"- `{flixnest_manifest_url}`",
         f"- `{UPSTREAM_DOMAINS_URL}`",
         f"- `{murph_manifest_url}`",

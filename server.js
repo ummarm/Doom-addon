@@ -314,6 +314,7 @@ const server = http.createServer(async (request, response) => {
           `Umbrella Y: ${url.origin}/addons/yoruix/manifest.json`,
           `Umbrella D: ${url.origin}/addons/d3adlyrocket/manifest.json`,
           `Umbrella F: ${url.origin}/addons/flixnest/manifest.json`,
+          `Umbrella A: ${url.origin}/addons/asura/manifest.json`,
           `Torbox: ${url.origin}/addons/torbox/manifest.json`,
           `Umbrella MF: ${url.origin}/addons/mediafusion/manifest.json`,
           `Umbrella AIO: ${url.origin}/addons/aiostreams/manifest.json`,

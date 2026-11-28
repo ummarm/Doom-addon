@@ -1,6 +1,6 @@
 {
   "name": "Doom-addon",
-  "version": "3.0.31",
+  "version": "3.0.32",
   "scrapers": [
     {
       "id": "4khdhub",
@@ -279,7 +279,7 @@
         "tv"
       ],
       "filename": "providers/flix_streams_emby.js",
-      "enabled": true,
+      "enabled": false,
       "formats": [
         "mp4",
         "mkv",
@@ -302,7 +302,7 @@
         "tv"
       ],
       "filename": "providers/flix_streams_mkvcinemas.js",
-      "enabled": true,
+      "enabled": false,
       "formats": [
         "mp4",
         "mkv",
@@ -325,7 +325,7 @@
         "tv"
       ],
       "filename": "providers/flix_streams_lotusvault.js",
-      "enabled": true,
+      "enabled": false,
       "formats": [
         "mp4",
         "mkv",
@@ -348,7 +348,7 @@
         "tv"
       ],
       "filename": "providers/flix_streams_archivevault.js",
-      "enabled": true,
+      "enabled": false,
       "formats": [
         "mp4",
         "mkv",
@@ -371,7 +371,7 @@
         "tv"
       ],
       "filename": "providers/flix_streams_uhdmovies.js",
-      "enabled": true,
+      "enabled": false,
       "formats": [
         "mp4",
         "mkv",
@@ -394,7 +394,7 @@
         "tv"
       ],
       "filename": "providers/flix_streams_4khdhub.js",
-      "enabled": true,
+      "enabled": false,
       "formats": [
         "mp4",
         "mkv",
@@ -417,7 +417,7 @@
         "tv"
       ],
       "filename": "providers/flix_streams_hdhub4u.js",
-      "enabled": true,
+      "enabled": false,
       "formats": [
         "mp4",
         "mkv",
@@ -440,7 +440,7 @@
         "tv"
       ],
       "filename": "providers/flix_streams_debridvault.js",
-      "enabled": true,
+      "enabled": false,
       "formats": [
         "mp4",
         "mkv",
@@ -463,7 +463,7 @@
         "tv"
       ],
       "filename": "providers/flix_streams_signalvault.js",
-      "enabled": true,
+      "enabled": false,
       "formats": [
         "mp4",
         "mkv",
@@ -486,7 +486,7 @@
         "tv"
       ],
       "filename": "providers/flix_streams_usenetvault.js",
-      "enabled": true,
+      "enabled": false,
       "formats": [
         "mp4",
         "mkv",
@@ -509,7 +509,7 @@
         "tv"
       ],
       "filename": "providers/flix_streams_streamvault.js",
-      "enabled": true,
+      "enabled": false,
       "formats": [
         "mp4",
         "mkv",
@@ -532,7 +532,7 @@
         "tv"
       ],
       "filename": "providers/flix_streams_other.js",
-      "enabled": true,
+      "enabled": false,
       "formats": [
         "mp4",
         "mkv",
@@ -555,7 +555,7 @@
         "tv"
       ],
       "filename": "providers/flix_streams_vegamovies.js",
-      "enabled": true,
+      "enabled": false,
       "formats": [
         "mp4",
         "mkv",
@@ -708,11 +708,20 @@
       "description": "CNCVerse English and Hindi streams validated for playback and byte-range seeking",
       "version": "1.0.0",
       "author": "CNCVerse",
-      "supportedTypes": ["movie", "tv"],
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
       "filename": "providers/cncverse.js",
       "enabled": true,
-      "formats": ["mp4", "mkv"],
-      "contentLanguage": ["en", "hi"]
+      "formats": [
+        "mp4",
+        "mkv"
+      ],
+      "contentLanguage": [
+        "en",
+        "hi"
+      ]
     },
     {
       "id": "mediafusion",
@@ -1075,6 +1084,145 @@
         "m3u8"
       ],
       "logo": "https://i.postimg.cc/4yVjQjpH/streamflix.png",
+      "contentLanguage": [
+        "en"
+      ]
+    },
+    {
+      "id": "vegamovies_asura",
+      "name": "VegaMovies Asura",
+      "description": "Indian & Hollywood movies/series from vegamovies.mq",
+      "version": "1.0.1",
+      "author": "piratezoro9",
+      "supportedTypes": [
+        "movie",
+        "tv",
+        "series"
+      ],
+      "filename": "providers/vegamovies_asura.js",
+      "enabled": true,
+      "formats": [
+        "mp4",
+        "mkv",
+        "m3u8"
+      ],
+      "logo": "https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=http://vegamovies.market&size=256",
+      "contentLanguage": [
+        "en",
+        "hi"
+      ],
+      "limited": true
+    },
+    {
+      "id": "moviesdrive_asura",
+      "name": "MoviesDrive Asura",
+      "description": "Hindi movies & series from new3.moviesdrives.my",
+      "version": "1.0.1",
+      "author": "piratezoro9",
+      "supportedTypes": [
+        "movie",
+        "tv",
+        "series"
+      ],
+      "filename": "providers/moviesdrive_asura.js",
+      "enabled": true,
+      "formats": [
+        "mp4",
+        "mkv"
+      ],
+      "logo": "https://new2.moviesdrives.my/wp-content/uploads/2026/01/cropped-Gemini_Generated_Image_qt93aqt93aqt93aq-1-180x180.png",
+      "contentLanguage": [
+        "en",
+        "hi"
+      ]
+    },
+    {
+      "id": "cinefreak_asura",
+      "name": "CineFreak Asura",
+      "description": "Direct MKV streams from cinefreak.nl",
+      "version": "1.0.0",
+      "author": "piratezoro9",
+      "supportedTypes": [
+        "movie",
+        "tv",
+        "series"
+      ],
+      "filename": "providers/cinefreak_asura.js",
+      "enabled": true,
+      "formats": [
+        "mkv",
+        "mp4"
+      ],
+      "logo": "https://cinefreak.nl/wp-content/uploads/2024/08/cropped-cgk-192x192.png",
+      "contentLanguage": [
+        "en",
+        "hi"
+      ]
+    },
+    {
+      "id": "4khdhub_asura",
+      "name": "4KHDHub Asura",
+      "description": "4K HD movies & TV series via FSL/FSLv2/Worker direct links from 4khdhub.one",
+      "version": "1.0.1",
+      "author": "piratezoro9",
+      "supportedTypes": [
+        "movie",
+        "tv",
+        "series"
+      ],
+      "filename": "providers/4khdhub_asura.js",
+      "enabled": true,
+      "formats": [
+        "mkv",
+        "mp4"
+      ],
+      "logo": "https://www.google.com/s2/favicons?domain=4khdhub.one&sz=256",
+      "contentLanguage": [
+        "en",
+        "hi"
+      ]
+    },
+    {
+      "id": "hdhub4u_asura",
+      "name": "HDHub4u Asura",
+      "description": "Indian & Hollywood movies/series from hdhub4u.cl via HubDrive→FSL",
+      "version": "1.0.0",
+      "author": "piratezoro9",
+      "supportedTypes": [
+        "movie",
+        "tv",
+        "series"
+      ],
+      "filename": "providers/hdhub4u_asura.js",
+      "enabled": true,
+      "formats": [
+        "mkv",
+        "mp4"
+      ],
+      "logo": "https://www.google.com/s2/favicons?domain=hdhub4u.cl&sz=256",
+      "contentLanguage": [
+        "en",
+        "hi"
+      ]
+    },
+    {
+      "id": "uhdmovies_asura",
+      "name": "UHDMovies Asura",
+      "description": "4K, 1080p Hollywood movies/series from uhdmovies.food via Google Drive",
+      "version": "1.0.0",
+      "author": "piratezoro9",
+      "supportedTypes": [
+        "movie",
+        "tv",
+        "series"
+      ],
+      "filename": "providers/uhdmovies_asura.js",
+      "enabled": true,
+      "formats": [
+        "mp4",
+        "mkv"
+      ],
+      "logo": "https://www.google.com/s2/favicons?domain=uhdmovies.food&sz=256",
       "contentLanguage": [
         "en"
       ]
